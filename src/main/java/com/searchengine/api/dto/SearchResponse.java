@@ -10,6 +10,7 @@ public record SearchResponse(
         int limit,
         int offset,
         boolean hasMore,
+        boolean providerHasMore,
         Instant generatedAt,
         int total,
         List<SearchItem> items

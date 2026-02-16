@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.util.HtmlUtils;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -37,9 +38,9 @@ public class StackOverflowSearchClient implements ExternalSearchClient {
     }
 
     @Override
-    public List<ProviderSearchResult> search(String query, int limit, int offset, String sort, List<String> tags) {
+    public ProviderSearchPage search(String query, int limit, int offset, String sort, List<String> tags) {
         if (backoffManager.isBackoffActive()) {
-            return List.of();
+            return ProviderSearchPage.empty();
         }
 
         try {
@@ -57,13 +58,15 @@ public class StackOverflowSearchClient implements ExternalSearchClient {
             backoffManager.registerFromResponse(response);
 
             if (response == null || !response.has("items")) {
-                return List.of();
+                return ProviderSearchPage.empty();
             }
+
+            boolean hasMore = response.path("has_more").asBoolean(false);
 
             List<ProviderSearchResult> results = new ArrayList<>();
             JsonNode items = response.path("items");
             if (!items.isArray()) {
-                return List.of();
+                return ProviderSearchPage.empty();
             }
 
             for (JsonNode item : items) {
@@ -71,18 +74,19 @@ public class StackOverflowSearchClient implements ExternalSearchClient {
                 if (url.isBlank()) {
                     continue;
                 }
-                String title = item.path("title").asText("");
+                String title = decodeText(item.path("title").asText(""));
                 long questionId = item.path("question_id").asLong(0L);
                 int score = item.path("score").asInt(0);
                 boolean answered = item.path("is_answered").asBoolean(false);
                 long acceptedAnswerId = item.path("accepted_answer_id").asLong(0L);
                 long creationDate = item.path("creation_date").asLong(0L);
+                String snippet = extractSnippet(item);
 
                 List<String> itemTags = new ArrayList<>();
                 JsonNode tagsNode = item.path("tags");
                 if (tagsNode.isArray()) {
                     for (JsonNode tag : tagsNode) {
-                        itemTags.add(tag.asText());
+                        itemTags.add(decodeText(tag.asText()));
                     }
                 }
 
@@ -93,7 +97,7 @@ public class StackOverflowSearchClient implements ExternalSearchClient {
                     questionId > 0 ? questionId : null,
                         url,
                         title,
-                        "Stack Overflow question relevant to query.",
+                        snippet,
                         SourceType.STACKOVERFLOW,
                     score,
                     answered,
@@ -104,9 +108,9 @@ public class StackOverflowSearchClient implements ExternalSearchClient {
                         metadata
                 ));
             }
-            return results;
+            return new ProviderSearchPage(results, hasMore);
         } catch (RuntimeException ignored) {
-            return List.of();
+            return ProviderSearchPage.empty();
         }
     }
 
@@ -119,7 +123,7 @@ public class StackOverflowSearchClient implements ExternalSearchClient {
             String key
     ) {
         UriComponentsBuilder builder = UriComponentsBuilder
-                .fromUriString(baseUrl + "/2.3/search/advanced")
+            .fromUriString(baseUrl + "/2.3/search/excerpts")
                 .queryParam("order", "desc")
                 .queryParam("sort", sort)
                 .queryParam("site", "stackoverflow")
@@ -168,5 +172,43 @@ public class StackOverflowSearchClient implements ExternalSearchClient {
             case "relevance", "votes", "activity", "creation" -> value;
             default -> "relevance";
         };
+    }
+
+    private String extractSnippet(JsonNode item) {
+        String excerpt = decodeText(stripHtml(item.path("excerpt").asText("")));
+        if (!excerpt.isBlank()) {
+            return excerpt;
+        }
+
+        String body = decodeText(stripHtml(item.path("body").asText("")));
+        if (!body.isBlank()) {
+            return truncate(body, 280);
+        }
+
+        return "Stack Overflow result.";
+    }
+
+    private String stripHtml(String input) {
+        if (input == null || input.isBlank()) {
+            return "";
+        }
+        return input
+                .replaceAll("<[^>]*>", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+    }
+
+    private String decodeText(String input) {
+        if (input == null || input.isBlank()) {
+            return "";
+        }
+        return HtmlUtils.htmlUnescape(input);
+    }
+
+    private String truncate(String input, int maxLength) {
+        if (input == null || input.length() <= maxLength) {
+            return input == null ? "" : input;
+        }
+        return input.substring(0, maxLength).trim() + "...";
     }
 }

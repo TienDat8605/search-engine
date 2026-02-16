@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.util.HtmlUtils;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -206,7 +207,7 @@ public class AsyncEnrichmentService {
         if (input == null || input.isBlank()) {
             return "";
         }
-        return input
+        return HtmlUtils.htmlUnescape(input)
                 .replaceAll("<[^>]*>", " ")
                 .replaceAll("\\s+", " ")
                 .trim();

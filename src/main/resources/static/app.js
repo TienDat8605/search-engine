@@ -112,7 +112,8 @@ function renderResults(payload) {
 
     setStatus(`Found ${payload.total} result${payload.total === 1 ? "" : "s"}.`);
     prevButton.disabled = currentOffset === 0;
-    nextButton.disabled = !payload.hasMore;
+    const providerHasMore = typeof payload.providerHasMore === "boolean" ? payload.providerHasMore : payload.hasMore;
+    nextButton.disabled = !providerHasMore;
 
     for (const item of items) {
         const fragment = resultCardTemplate.content.cloneNode(true);

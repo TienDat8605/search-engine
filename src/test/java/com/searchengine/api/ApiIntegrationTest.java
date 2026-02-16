@@ -2,6 +2,7 @@ package com.searchengine.api;
 
 import com.searchengine.domain.ProviderSearchResult;
 import com.searchengine.domain.SourceType;
+import com.searchengine.integration.ProviderSearchPage;
 import com.searchengine.integration.StackOverflowSearchClient;
 import com.searchengine.service.AsyncEnrichmentService;
 import com.searchengine.service.SearchCacheService;
@@ -57,8 +58,8 @@ class ApiIntegrationTest {
         ProviderSearchResult sample = new ProviderSearchResult(
                 12345L,
                 "https://stackoverflow.com/questions/12345/example",
-                "How to fix dependency injection in Spring Boot?",
-                "Use constructor injection and avoid field injection.",
+                                "How to fix dependency injection in Spring Boot?",
+                                "Use constructor injection and avoid field injection.",
                 SourceType.STACKOVERFLOW,
                 42,
                 true,
@@ -70,7 +71,7 @@ class ApiIntegrationTest {
         );
 
         when(stackOverflowSearchClient.search(anyString(), anyInt(), anyInt(), anyString(), anyList()))
-                .thenReturn(List.of(sample));
+                .thenReturn(new ProviderSearchPage(List.of(sample), false));
 
         mockMvc.perform(get("/api/search")
                         .param("q", "spring boot dependency injection")
@@ -84,10 +85,41 @@ class ApiIntegrationTest {
                 .andExpect(jsonPath("$.limit").value(10))
                 .andExpect(jsonPath("$.offset").value(0))
                 .andExpect(jsonPath("$.hasMore").value(false))
+                .andExpect(jsonPath("$.providerHasMore").value(false))
                 .andExpect(jsonPath("$.items[0].questionId").value(12345))
                 .andExpect(jsonPath("$.items[0].accepted").value(true))
                 .andExpect(jsonPath("$.items[0].answered").value(true))
                 .andExpect(jsonPath("$.items[0].source").value("STACKOVERFLOW"));
+    }
+
+    @Test
+        void searchEndpoint_usesProviderSnippetNotGenericPlaceholder() throws Exception {
+        ProviderSearchResult sample = new ProviderSearchResult(
+                456L,
+                "https://stackoverflow.com/questions/456/example",
+                                "Spring & Boot: can't parse UTF-8?",
+                                "Use HttpMessageConverter with UTF-8 and decode entities.",
+                SourceType.STACKOVERFLOW,
+                30,
+                true,
+                777L,
+                1.4,
+                Instant.parse("2025-12-05T00:00:00Z"),
+                List.of("spring-boot"),
+                "{\"score\":30,\"answered\":true}"
+        );
+
+        when(stackOverflowSearchClient.search(anyString(), anyInt(), anyInt(), anyString(), anyList()))
+                .thenReturn(new ProviderSearchPage(List.of(sample), false));
+
+        mockMvc.perform(get("/api/search")
+                        .param("q", "spring utf8 parse")
+                        .param("sort", "relevance")
+                        .param("limit", "10")
+                        .param("offset", "0"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].title").value("Spring & Boot: can't parse UTF-8?"))
+                .andExpect(jsonPath("$.items[0].snippet").value("Use HttpMessageConverter with UTF-8 and decode entities."));
     }
 
     @Test
@@ -108,7 +140,7 @@ class ApiIntegrationTest {
         );
 
         when(stackOverflowSearchClient.search(anyString(), anyInt(), anyInt(), anyString(), anyList()))
-                .thenReturn(List.of(sample));
+                .thenReturn(new ProviderSearchPage(List.of(sample), false));
 
         mockMvc.perform(get("/api/search")
                         .param("q", "redis cache spring")

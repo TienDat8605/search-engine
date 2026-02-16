@@ -20,6 +20,7 @@ import com.searchengine.api.dto.SearchItem;
 import com.searchengine.api.dto.SearchResponse;
 import com.searchengine.domain.ProviderSearchResult;
 import com.searchengine.integration.ExternalSearchClient;
+import com.searchengine.integration.ProviderSearchPage;
 import com.searchengine.persistence.DocumentEntity;
 import com.searchengine.persistence.DocumentRepository;
 import com.searchengine.persistence.QueryLogEntity;
@@ -27,6 +28,8 @@ import com.searchengine.persistence.QueryLogRepository;
 
 @Service
 public class SearchService {
+
+    private static final int MAX_PROVIDER_FETCH_SIZE = 50;
 
     private final List<ExternalSearchClient> clients;
     private final Ranker ranker;
@@ -71,11 +74,13 @@ public class SearchService {
     }
 
     private SearchResponse executeAndCache(String query, int limit, int offset, String sort, List<String> tags, String cacheKey) {
-        List<ProviderSearchResult> providerResults = runProviderSearch(query, limit, offset, sort, tags);
+        int fetchSize = computeProviderFetchSize(limit);
+        ProviderSearchPage providerPage = runProviderSearch(query, fetchSize, offset, sort, tags);
+        List<ProviderSearchResult> providerResults = providerPage.items();
         List<ProviderSearchResult> deduped = deduplicate(providerResults);
 
         List<SearchItem> rankedItems = ranker.rank(query, deduped, limit);
-        boolean hasMore = providerResults.size() >= limit;
+        boolean hasMore = providerPage.hasMore();
         SearchResponse response = new SearchResponse(
                 query,
                 sort,
@@ -83,6 +88,7 @@ public class SearchService {
                 limit,
                 offset,
                 hasMore,
+                providerPage.hasMore(),
                 Instant.now(),
                 rankedItems.size(),
                 rankedItems
@@ -96,23 +102,26 @@ public class SearchService {
         return response;
     }
 
-    private List<ProviderSearchResult> runProviderSearch(String query, int limit, int offset, String sort, List<String> tags) {
-        List<CompletableFuture<List<ProviderSearchResult>>> tasks = clients.stream()
+    private ProviderSearchPage runProviderSearch(String query, int limit, int offset, String sort, List<String> tags) {
+        List<CompletableFuture<ProviderSearchPage>> tasks = clients.stream()
                 .map(client -> CompletableFuture.supplyAsync(() -> client.search(query, limit, offset, sort, tags), searchExecutor))
                 .toList();
 
         CompletableFuture.allOf(tasks.toArray(CompletableFuture[]::new)).join();
 
         List<ProviderSearchResult> results = new ArrayList<>();
-        for (CompletableFuture<List<ProviderSearchResult>> task : tasks) {
+        boolean hasMore = false;
+        for (CompletableFuture<ProviderSearchPage> task : tasks) {
             try {
-                results.addAll(task.get());
+                ProviderSearchPage page = task.get();
+                results.addAll(page.items());
+                hasMore = hasMore || page.hasMore();
             } catch (InterruptedException ignored) {
                 Thread.currentThread().interrupt();
             } catch (ExecutionException ignored) {
             }
         }
-        return results;
+        return new ProviderSearchPage(results, hasMore);
     }
 
     private List<ProviderSearchResult> deduplicate(List<ProviderSearchResult> raw) {
@@ -155,7 +164,7 @@ public class SearchService {
     private String buildCacheKey(String query, int limit, int offset, String sort, List<String> tags) {
         String normalizedQuery = query.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
         String tagPart = tags.isEmpty() ? "*" : String.join(",", tags);
-        return "search:v2:" + normalizedQuery + ":" + limit + ":" + offset + ":" + sort + ":" + tagPart;
+        return "search:v3:" + normalizedQuery + ":" + limit + ":" + offset + ":" + sort + ":" + tagPart;
     }
 
     private List<ProviderSearchResult> selectEnrichmentCandidates(
@@ -175,6 +184,12 @@ public class SearchService {
             }
         }
         return candidates;
+    }
+
+    private int computeProviderFetchSize(int limit) {
+        int safeLimit = Math.max(1, limit);
+        int overFetched = safeLimit * 3;
+        return Math.min(MAX_PROVIDER_FETCH_SIZE, overFetched);
     }
 
     private String normalize(String input) {
