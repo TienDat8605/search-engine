@@ -32,4 +32,9 @@ Thumbs.db
 *.swp
 *.swo
 
+# Local-only helper scripts (do not commit)
+/scripts/start-dev.sh
+/scripts/stop-dev.sh
+/scripts/dev-status.sh
+
 report_v2.md

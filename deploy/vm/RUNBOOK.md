@@ -39,6 +39,13 @@ cd deploy/vm
 docker compose -f docker-compose.vm.yml --env-file .env up -d --build
 ```
 
+Or use the helper script:
+
+```bash
+cd deploy/vm
+bash deploy.sh
+```
+
 ## 4) Verify services
 
 ```bash
