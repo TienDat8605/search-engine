@@ -1,0 +1,33 @@
+# Build outputs
+/target/
+
+# Maven / Java
+*.class
+*.jar
+*.war
+*.ear
+hs_err_pid*
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+/deploy/vm/.env
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE / Editor
+.idea/
+*.iml
+.vscode/
+
+# Temporary files
+*.tmp
+*.swp
+*.swo
