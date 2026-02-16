@@ -145,9 +145,18 @@ public class SearchService {
     public void persistDocuments(List<ProviderSearchResult> results) {
         List<DocumentEntity> entities = new ArrayList<>();
         for (ProviderSearchResult result : results) {
-            DocumentEntity entity = new DocumentEntity();
+            DocumentEntity entity = null;
+            if (result.questionId() != null) {
+                entity = documentRepository.findByQuestionId(result.questionId()).orElse(null);
+            }
+            if (entity == null) {
+                entity = documentRepository.findById(result.url()).orElseGet(DocumentEntity::new);
+            }
+
             entity.setQuestionId(result.questionId());
-            entity.setUrl(result.url());
+            if (entity.getUrl() == null || entity.getUrl().isBlank()) {
+                entity.setUrl(result.url());
+            }
             entity.setSource(result.source().name());
             entity.setTitle(result.title());
             entity.setNormalizedText(normalize(result.title() + " " + result.snippet()));
@@ -164,7 +173,7 @@ public class SearchService {
     private String buildCacheKey(String query, int limit, int offset, String sort, List<String> tags) {
         String normalizedQuery = query.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
         String tagPart = tags.isEmpty() ? "*" : String.join(",", tags);
-        return "search:v3:" + normalizedQuery + ":" + limit + ":" + offset + ":" + sort + ":" + tagPart;
+        return "search:v4:" + normalizedQuery + ":" + limit + ":" + offset + ":" + sort + ":" + tagPart;
     }
 
     private List<ProviderSearchResult> selectEnrichmentCandidates(

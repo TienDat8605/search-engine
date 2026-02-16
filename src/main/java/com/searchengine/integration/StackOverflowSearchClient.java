@@ -70,7 +70,7 @@ public class StackOverflowSearchClient implements ExternalSearchClient {
             }
 
             for (JsonNode item : items) {
-                String url = item.path("link").asText("");
+                String url = resolveUrl(item);
                 if (url.isBlank()) {
                     continue;
                 }
@@ -186,6 +186,20 @@ public class StackOverflowSearchClient implements ExternalSearchClient {
         }
 
         return "Stack Overflow result.";
+    }
+
+    private String resolveUrl(JsonNode item) {
+        long questionId = item.path("question_id").asLong(0L);
+        if (questionId > 0) {
+            return "https://stackoverflow.com/questions/" + questionId;
+        }
+
+        String link = item.path("link").asText("");
+        if (!link.isBlank()) {
+            return link;
+        }
+
+        return "";
     }
 
     private String stripHtml(String input) {
