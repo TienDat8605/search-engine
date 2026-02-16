@@ -12,11 +12,6 @@ const queryMeta = document.getElementById("queryMeta");
 const prevButton = document.getElementById("prevButton");
 const nextButton = document.getElementById("nextButton");
 const pageLabel = document.getElementById("pageLabel");
-const metricTotalQueries = document.getElementById("metricTotalQueries");
-const metricQueries24h = document.getElementById("metricQueries24h");
-const metricTotalDocs = document.getElementById("metricTotalDocs");
-const topQueriesList = document.getElementById("topQueriesList");
-const analyticsHint = document.getElementById("analyticsHint");
 const docPanel = document.getElementById("docPanel");
 const docTitle = document.getElementById("docTitle");
 const docMeta = document.getElementById("docMeta");
@@ -26,7 +21,6 @@ const docSourceLink = document.getElementById("docSourceLink");
 const docCloseButton = document.getElementById("docCloseButton");
 
 let currentOffset = 0;
-let lastPayload = null;
 
 initializeFromUrl();
 
@@ -51,7 +45,6 @@ nextButton.addEventListener("click", async () => {
 
 window.addEventListener("popstate", () => {
     initializeFromUrl();
-    runSearch();
 });
 
 docCloseButton.addEventListener("click", () => {
@@ -90,49 +83,13 @@ async function runSearch() {
             throw new Error(extractErrorMessage(payload, response.status));
         }
 
-        lastPayload = payload;
         renderResults(payload);
-        refreshAnalytics();
     } catch (error) {
-        lastPayload = null;
         toolbar.hidden = true;
         resultsArea.innerHTML = "";
         setStatus(error.message || "Something went wrong.", true);
     } finally {
         setLoading(false);
-    }
-}
-
-async function refreshAnalytics() {
-    try {
-        const response = await fetch("/api/analytics");
-        const payload = await response.json();
-        if (!response.ok) {
-            throw new Error(extractErrorMessage(payload, response.status));
-        }
-        renderAnalytics(payload);
-    } catch (_error) {
-        analyticsHint.textContent = "Analytics unavailable right now.";
-    }
-}
-
-function renderAnalytics(payload) {
-    metricTotalQueries.textContent = formatNumber(payload.totalQueries);
-    metricQueries24h.textContent = formatNumber(payload.queriesLast24Hours);
-    metricTotalDocs.textContent = formatNumber(payload.totalDocuments);
-
-    topQueriesList.innerHTML = "";
-    const top = Array.isArray(payload.topQueries) ? payload.topQueries : [];
-    if (!top.length) {
-        analyticsHint.textContent = "No query logs yet.";
-        return;
-    }
-
-    analyticsHint.textContent = "";
-    for (const row of top.slice(0, 8)) {
-        const li = document.createElement("li");
-        li.textContent = `${row.query} (${row.hits})`;
-        topQueriesList.appendChild(li);
     }
 }
 
@@ -276,7 +233,7 @@ function getLimit() {
 
 function initializeFromUrl() {
     const params = new URLSearchParams(window.location.search);
-    const query = params.get("q") || "spring boot dependency injection error";
+    const query = params.get("q") || "";
     const sort = params.get("sort") || "relevance";
     const tags = params.get("tags") || "";
     const limit = clampLimit(params.get("limit") || "10");
@@ -310,13 +267,6 @@ function extractErrorMessage(payload, status) {
     return `Search request failed (${status}).`;
 }
 
-function formatNumber(value) {
-    const n = Number(value);
-    if (Number.isNaN(n)) {
-        return "-";
-    }
-    return new Intl.NumberFormat().format(n);
-}
-
-runSearch();
-refreshAnalytics();
+toolbar.hidden = true;
+resultsArea.innerHTML = "";
+setStatus("Type a query and press Search.");
