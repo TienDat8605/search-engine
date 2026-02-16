@@ -1,0 +1,373 @@
+:root {
+    color-scheme: light;
+    --bg: #f8fafc;
+    --panel: #ffffff;
+    --text: #0f172a;
+    --muted: #475569;
+    --line: #e2e8f0;
+    --brand: #1d4ed8;
+    --brand-soft: #dbeafe;
+    --ok: #15803d;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+}
+
+.page {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 24px 16px 40px;
+}
+
+.hero h1 {
+    margin: 0;
+    font-size: 2rem;
+}
+
+.hero p {
+    margin: 8px 0 0;
+    color: var(--muted);
+}
+
+.search-panel {
+    margin-top: 20px;
+    padding: 16px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--panel);
+}
+
+.search-form {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+}
+
+input,
+select,
+button {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    font: inherit;
+}
+
+input,
+select {
+    padding: 10px 12px;
+    width: 100%;
+}
+
+button {
+    padding: 10px 16px;
+    font-weight: 600;
+    background: var(--brand);
+    color: #fff;
+    border-color: var(--brand);
+    cursor: pointer;
+}
+
+button:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+.filters {
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+
+label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 0.92rem;
+    color: var(--muted);
+}
+
+.status {
+    margin-top: 14px;
+    color: var(--muted);
+    min-height: 24px;
+}
+
+.status.error {
+    color: #b91c1c;
+}
+
+.toolbar {
+    margin-top: 6px;
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+
+.query-meta {
+    font-size: 0.9rem;
+    color: var(--muted);
+}
+
+.pager {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.pager button {
+    background: #fff;
+    color: var(--text);
+    border-color: var(--line);
+    padding: 7px 10px;
+}
+
+#pageLabel {
+    min-width: 58px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+
+.results {
+    margin-top: 8px;
+    display: grid;
+    gap: 12px;
+}
+
+.analytics {
+    margin-top: 12px;
+    margin-bottom: 8px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--panel);
+    padding: 14px;
+}
+
+.analytics h2 {
+    margin: 0 0 10px;
+    font-size: 1.1rem;
+}
+
+.analytics-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.metric {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.metric span {
+    font-size: 0.85rem;
+    color: var(--muted);
+}
+
+.metric strong {
+    font-size: 1.2rem;
+}
+
+.top-queries {
+    margin-top: 12px;
+}
+
+.top-queries h3 {
+    margin: 0;
+    font-size: 0.95rem;
+}
+
+.top-queries ul {
+    margin: 8px 0 0;
+    padding-left: 18px;
+}
+
+.top-queries li {
+    margin: 4px 0;
+    color: var(--muted);
+}
+
+.analytics-hint {
+    margin: 8px 0 0;
+    font-size: 0.85rem;
+    color: var(--muted);
+}
+
+.result-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px;
+}
+
+.result-actions {
+    margin-top: 10px;
+}
+
+.result-actions .detail-button {
+    background: #fff;
+    color: var(--text);
+    border-color: var(--line);
+    padding: 7px 10px;
+}
+
+.doc-panel {
+    margin-top: 12px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--panel);
+    padding: 14px;
+}
+
+.doc-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+
+.doc-panel-header h2 {
+    margin: 0;
+    font-size: 1.1rem;
+}
+
+.doc-close {
+    background: #fff;
+    color: var(--text);
+    border-color: var(--line);
+    padding: 6px 10px;
+}
+
+.doc-meta {
+    margin: 10px 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+
+.doc-sections {
+    display: grid;
+    gap: 10px;
+}
+
+.doc-sections article {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px;
+}
+
+.doc-sections h3 {
+    margin: 0 0 8px;
+    font-size: 0.95rem;
+}
+
+.doc-sections p {
+    margin: 0;
+    line-height: 1.5;
+    white-space: pre-wrap;
+}
+
+.result-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.result-title {
+    color: var(--brand);
+    text-decoration: none;
+    font-weight: 700;
+}
+
+.result-title:hover {
+    text-decoration: underline;
+}
+
+.meta {
+    margin-top: 8px;
+    font-size: 0.9rem;
+    color: var(--muted);
+}
+
+.snippet {
+    margin: 10px 0;
+    line-height: 1.5;
+}
+
+.tags {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.tag {
+    background: var(--brand-soft);
+    color: #1e3a8a;
+    border-radius: 999px;
+    padding: 3px 8px;
+    font-size: 0.8rem;
+}
+
+.badge {
+    display: inline-block;
+    border-radius: 999px;
+    padding: 3px 8px;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.badge.accepted {
+    background: #dcfce7;
+    color: var(--ok);
+}
+
+.badge.answered {
+    background: #f1f5f9;
+    color: #334155;
+}
+
+.skeleton {
+    height: 116px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: linear-gradient(90deg, #f8fafc 25%, #eef2ff 50%, #f8fafc 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.2s infinite;
+}
+
+@keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+@media (max-width: 768px) {
+    .search-form {
+        grid-template-columns: 1fr;
+    }
+
+    .filters {
+        grid-template-columns: 1fr;
+    }
+
+    .toolbar {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .analytics-grid {
+        grid-template-columns: 1fr;
+    }
+}

@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stack Overflow Semantic Search</title>
+    <link rel="stylesheet" href="/app.css" />
+</head>
+<body>
+<main class="page">
+    <header class="hero">
+        <h1>Stack Overflow Semantic Search</h1>
+        <p>Find high-signal coding answers faster.</p>
+    </header>
+
+    <section class="search-panel">
+        <form id="searchForm" class="search-form">
+            <input
+                    id="queryInput"
+                    name="q"
+                    type="text"
+                    placeholder="Search errors, concepts, or coding questions..."
+                    autocomplete="off"
+                    required
+            />
+            <button id="searchButton" type="submit">Search</button>
+        </form>
+
+        <div class="filters">
+            <label>
+                Sort
+                <select id="sortSelect" name="sort">
+                    <option value="relevance">Relevance</option>
+                    <option value="new">New</option>
+                </select>
+            </label>
+            <label>
+                Tags
+                <input id="tagsInput" name="tags" type="text" placeholder="spring-boot,redis" />
+            </label>
+            <label>
+                Limit
+                <input id="limitInput" name="limit" type="number" min="1" max="50" value="10" />
+            </label>
+        </div>
+    </section>
+
+    <section class="status" id="statusArea" aria-live="polite"></section>
+
+    <section class="toolbar" id="toolbar" hidden>
+        <div id="queryMeta" class="query-meta"></div>
+        <div class="pager">
+            <button id="prevButton" type="button">Previous</button>
+            <span id="pageLabel">Page 1</span>
+            <button id="nextButton" type="button">Next</button>
+        </div>
+    </section>
+
+    <section class="analytics" id="analyticsPanel" aria-label="Analytics">
+        <h2>Analytics</h2>
+        <div class="analytics-grid" id="analyticsGrid">
+            <div class="metric"><span>Total Queries</span><strong id="metricTotalQueries">-</strong></div>
+            <div class="metric"><span>Queries (24h)</span><strong id="metricQueries24h">-</strong></div>
+            <div class="metric"><span>Total Documents</span><strong id="metricTotalDocs">-</strong></div>
+        </div>
+        <div class="top-queries">
+            <h3>Top Queries</h3>
+            <ul id="topQueriesList"></ul>
+            <p id="analyticsHint" class="analytics-hint"></p>
+        </div>
+    </section>
+
+    <section id="results" class="results" aria-label="Search results"></section>
+
+    <section id="docPanel" class="doc-panel" hidden aria-label="Document detail">
+        <div class="doc-panel-header">
+            <h2 id="docTitle">Document Detail</h2>
+            <button id="docCloseButton" type="button" class="doc-close">Close</button>
+        </div>
+        <p id="docMeta" class="doc-meta"></p>
+        <div class="doc-sections">
+            <article>
+                <h3>Question</h3>
+                <p id="docQuestion">No question text available yet.</p>
+            </article>
+            <article>
+                <h3>Best Answer</h3>
+                <p id="docAnswer">No best answer text available yet.</p>
+            </article>
+        </div>
+        <a id="docSourceLink" target="_blank" rel="noopener noreferrer">Open on Stack Overflow</a>
+    </section>
+</main>
+
+<template id="resultCardTemplate">
+    <article class="result-card">
+        <div class="result-header">
+            <a class="result-title" target="_blank" rel="noopener noreferrer"></a>
+            <div class="badges">
+                <span class="badge accepted" hidden>Accepted</span>
+                <span class="badge answered" hidden>Answered</span>
+            </div>
+        </div>
+        <div class="meta"></div>
+        <p class="snippet"></p>
+        <div class="tags"></div>
+        <div class="result-actions">
+            <button type="button" class="detail-button">View detail</button>
+        </div>
+    </article>
+</template>
+
+<script src="/app.js" defer></script>
+</body>
+</html>
