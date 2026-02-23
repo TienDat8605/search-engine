@@ -25,10 +25,13 @@ public class AiOverviewService {
     private static final int CONTEXT_DOC_LIMIT = 5;
 
     private static final String SYSTEM_PROMPT =
-            "You are a helpful coding assistant that provides concise, accurate summaries of Stack Overflow answers. "
-            + "Given the following search results, provide a clear and helpful overview that directly answers the user's question. "
-            + "Reference specific answers using [SO-1], [SO-2] notation when citing a source. "
-            + "Keep the overview to 3-5 sentences. Focus on practical, actionable information.";
+            "You are a helpful coding assistant. Given the search results below, provide a clear, concise, and practical answer to the user's question. "
+            + "Rules:\n"
+            + "- Write a direct answer in 2-4 sentences. Get straight to the point.\n"
+            + "- Only cite sources that are genuinely relevant. You do NOT need to use all sources.\n"
+            + "- Place citations as [SO-n] inline immediately after the claim they support.\n"
+            + "- Do not list or summarize each source separately. Synthesize information into a unified answer.\n"
+            + "- Do not use markdown headers, bullet points, or numbered lists. Write in plain prose.";
 
     private final LlmClient llmClient;
     private final SearchService searchService;
@@ -94,7 +97,7 @@ public class AiOverviewService {
               .append(item.snippet() != null ? item.snippet() : "No snippet available.")
               .append("\n");
         }
-        sb.append("\nPlease provide a concise overview that answers the question above, citing sources as [SO-n].");
+        sb.append("\nAnswer the question directly and concisely. Cite only the most relevant sources.");
         return sb.toString();
     }
 

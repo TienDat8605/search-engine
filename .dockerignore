@@ -1,0 +1,13 @@
+.git
+.github
+.env
+.env.*
+*.md
+docs/
+deploy/
+scripts/
+target/
+node_modules/
+.idea/
+*.iml
+.vscode/

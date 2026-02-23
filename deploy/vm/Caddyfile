@@ -1,8 +1,9 @@
 tiendat.tech {
     encode gzip zstd
 
-    @api path /api/*
-    reverse_proxy @api api:8080
+    # Block actuator endpoints from public access
+    @actuator path /actuator/*
+    respond @actuator 404
 
     reverse_proxy api:8080
 }

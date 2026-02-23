@@ -177,10 +177,8 @@ class ApiIntegrationTest {
     }
 
     @Test
-    void askEndpoint_returnsEmptyWhenLlmDisabled() throws Exception {
+    void askEndpoint_returns503WhenLlmDisabled() throws Exception {
         mockMvc.perform(get("/api/ask").param("q", "how to fix nullpointerexception"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.answer").value(""))
-                .andExpect(jsonPath("$.citations").isArray());
+                .andExpect(status().isServiceUnavailable());
     }
 }

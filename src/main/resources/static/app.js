@@ -215,6 +215,52 @@ function hideAiOverview() {
     aiCitations.innerHTML = "";
 }
 
+function escapeHtml(text) {
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+}
+
+function formatAiMarkdown(raw, citationMap) {
+    // Extract fenced code blocks first and replace with placeholders
+    const codeBlocks = [];
+    const withPlaceholders = raw.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
+        const idx = codeBlocks.length;
+        const langAttr = lang ? ` data-lang="${escapeHtml(lang)}"` : "";
+        codeBlocks.push(
+            `<pre class="ai-code-block"><div class="ai-code-header">${escapeHtml(lang || "code")}</div><code${langAttr}>${escapeHtml(code.replace(/\n$/, ""))}</code></pre>`
+        );
+        return `\x00CODEBLOCK_${idx}\x00`;
+    });
+
+    // Escape HTML in the remaining text
+    let html = escapeHtml(withPlaceholders);
+
+    // Inline code: `code`
+    html = html.replace(/`([^`]+)`/g, '<code class="ai-inline-code">$1</code>');
+
+    // Bold: **text**
+    html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+
+    // Citation markers: [SO-n]
+    html = html.replace(/\[SO-(\d+)\]/g, (match, num) => {
+        const c = citationMap[Number.parseInt(num, 10)];
+        if (!c) return "";
+        const safeTitle = (c.title || "").replace(/"/g, "&quot;");
+        const safeUrl = (c.url || "#").replace(/"/g, "&quot;");
+        return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="ai-ref" data-tooltip="${safeTitle}"><sup>${num}</sup></a>`;
+    });
+
+    // Newlines to <br> (but not inside code block placeholders)
+    html = html.replace(/\n/g, "<br>");
+
+    // Restore code block placeholders
+    html = html.replace(/\x00CODEBLOCK_(\d+)\x00/g, (_, idx) => codeBlocks[Number.parseInt(idx, 10)]);
+
+    return html;
+}
+
 function renderAiOverview(payload) {
     if (!payload || !payload.overview) {
         hideAiOverview();
@@ -222,25 +268,16 @@ function renderAiOverview(payload) {
     }
 
     aiOverview.hidden = false;
-    aiOverviewContent.textContent = payload.overview;
-
     const citations = payload.citations || [];
-    if (citations.length > 0) {
-        aiCitations.hidden = false;
-        aiCitations.innerHTML = "";
-        for (const c of citations) {
-            const li = document.createElement("li");
-            const link = document.createElement("a");
-            link.href = c.url || "#";
-            link.textContent = c.title || `Source ${c.index}`;
-            link.target = "_blank";
-            link.rel = "noopener noreferrer";
-            li.appendChild(link);
-            aiCitations.appendChild(li);
-        }
-    } else {
-        aiCitations.hidden = true;
+    const citationMap = {};
+    for (const c of citations) {
+        citationMap[c.index] = c;
     }
+
+    aiOverviewContent.innerHTML = formatAiMarkdown(payload.overview, citationMap);
+
+    aiCitations.hidden = true;
+    aiCitations.innerHTML = "";
 }
 
 async function loadDocumentDetail(questionId) {

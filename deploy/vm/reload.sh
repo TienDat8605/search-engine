@@ -5,7 +5,6 @@ VM_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 REPO_ROOT="$(CDPATH= cd -- "$VM_DIR/../.." && pwd)"
 COMPOSE_FILE="$VM_DIR/docker-compose.vm.yml"
 ENV_FILE="$VM_DIR/.env"
-HEALTH_URL="${HEALTH_URL:-https://tiendat.tech/api/health}"
 PURGE_HOST=0
 ASSUME_YES=0
 
@@ -103,12 +102,18 @@ docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --build --remove-
 echo "[3/4] Current service status:"
 docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps
 
-echo "[4/4] Health check (may fail briefly while app boots)..."
-if command -v curl >/dev/null 2>&1 && curl -fsS "$HEALTH_URL" >/tmp/vm-health.out 2>/dev/null; then
-  echo "[ok] Health endpoint reachable: $HEALTH_URL"
-  cat /tmp/vm-health.out
-  echo
-else
-  echo "[warn] Health endpoint not reachable yet: $HEALTH_URL"
-  echo "       Check logs: docker compose -f docker-compose.vm.yml --env-file .env logs --tail=120 api proxy"
-fi
+echo "[4/4] Waiting for API to become healthy..."
+for i in $(seq 1 20); do
+  if docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T api curl -fsS "http://localhost:8080/actuator/health" >/tmp/vm-health.out 2>/dev/null; then
+    echo "[ok] API is healthy (attempt $i)"
+    cat /tmp/vm-health.out
+    echo
+    break
+  fi
+  if [ "$i" -eq 20 ]; then
+    echo "[warn] API not healthy after 20 attempts."
+    echo "       Check logs: docker compose -f $COMPOSE_FILE --env-file $ENV_FILE logs --tail=120 api"
+  else
+    sleep 5
+  fi
+done

@@ -89,12 +89,19 @@ docker compose -f docker-compose.vm.yml --env-file .env up -d --build
 echo "[2/3] Current service status:"
 docker compose -f docker-compose.vm.yml ps
 
-echo "[3/3] API health check (may fail briefly while app is booting)..."
-if curl -fsS "https://tiendat.tech/api/health" >/tmp/vm-health.out 2>/dev/null; then
-  echo "[ok] Public health endpoint is reachable"
-  cat /tmp/vm-health.out
-  echo
-else
-  echo "[warn] Public health endpoint not reachable yet."
-  echo "       Check logs: docker compose -f docker-compose.vm.yml logs --tail=120 api proxy"
-fi
+echo "[3/3] Waiting for API to become healthy..."
+HEALTH_URL="http://localhost:8080/actuator/health"
+for i in $(seq 1 20); do
+  if docker compose -f docker-compose.vm.yml --env-file .env exec -T api curl -fsS "$HEALTH_URL" >/tmp/vm-health.out 2>/dev/null; then
+    echo "[ok] API is healthy (attempt $i)"
+    cat /tmp/vm-health.out
+    echo
+    break
+  fi
+  if [ "$i" -eq 20 ]; then
+    echo "[warn] API not healthy after 20 attempts."
+    echo "       Check logs: docker compose -f docker-compose.vm.yml --env-file .env logs --tail=120 api"
+  else
+    sleep 5
+  fi
+done
