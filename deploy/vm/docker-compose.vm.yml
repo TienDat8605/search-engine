@@ -26,6 +26,10 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       STACKEXCHANGE_API_KEY: ${STACKEXCHANGE_API_KEY}
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY}
+      JINA_API_KEY: ${JINA_API_KEY}
+      EMBEDDING_ENABLED: ${EMBEDDING_ENABLED:-true}
+      LLM_ENABLED: ${LLM_ENABLED:-true}
       JAVA_OPTS: -Xms512m -Xmx1024m
     depends_on:
       postgres:
@@ -34,7 +38,7 @@ services:
         condition: service_healthy
 
   postgres:
-    image: postgres:16
+    image: pgvector/pgvector:pg16
     container_name: so-search-postgres
     restart: unless-stopped
     environment:
