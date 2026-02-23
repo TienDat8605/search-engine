@@ -112,11 +112,28 @@ public class SearchService {
                 providerPage.hasMore(), providerPage.hasMore(),
                 Instant.now(), rankedItems.size(), rankedItems, semanticMode);
 
-        List<ProviderSearchResult> enrichmentCandidates = selectEnrichmentCandidates(deduped, rankedItems);
-        persistDocuments(deduped);
-        cacheService.put(cacheKey, response);
-        asyncEnrichmentService.enqueue(enrichmentCandidates);
-        logQuery(query, sort, tags, limit, offset, response.total(), false);
+        // Side-effects must never prevent the search response from being returned
+        try {
+            persistDocuments(deduped);
+        } catch (Exception e) {
+            log.error("Failed to persist documents for query '{}': {}", query, e.getMessage(), e);
+        }
+        try {
+            cacheService.put(cacheKey, response);
+        } catch (Exception e) {
+            log.warn("Failed to cache search response for query '{}': {}", query, e.getMessage());
+        }
+        try {
+            List<ProviderSearchResult> enrichmentCandidates = selectEnrichmentCandidates(deduped, rankedItems);
+            asyncEnrichmentService.enqueue(enrichmentCandidates);
+        } catch (Exception e) {
+            log.warn("Failed to enqueue enrichment for query '{}': {}", query, e.getMessage());
+        }
+        try {
+            logQuery(query, sort, tags, limit, offset, response.total(), false);
+        } catch (Exception e) {
+            log.warn("Failed to log query '{}': {}", query, e.getMessage());
+        }
         return response;
     }
 
@@ -127,21 +144,30 @@ public class SearchService {
         boolean soUnavailable = backoffManager.isBackoffActive() || backoffManager.isQuotaExhausted();
 
         if (!soUnavailable) {
-            ProviderSearchPage page = CompletableFuture
-                    .supplyAsync(() -> soClient.search(query, limit, offset, sort, tags), searchExecutor)
-                    .join();
-            if (!page.items().isEmpty()) {
-                return page;
+            try {
+                ProviderSearchPage page = CompletableFuture
+                        .supplyAsync(() -> soClient.search(query, limit, offset, sort, tags), searchExecutor)
+                        .join();
+                if (!page.items().isEmpty()) {
+                    return page;
+                }
+                soUnavailable = backoffManager.isQuotaExhausted() || backoffManager.isBackoffActive();
+            } catch (Exception e) {
+                log.error("StackOverflow search failed for query '{}': {}", query, e.getMessage(), e);
+                soUnavailable = true;
             }
-            soUnavailable = backoffManager.isQuotaExhausted() || backoffManager.isBackoffActive();
         }
 
         if (soUnavailable && jinaClient.isEnabled()) {
             log.warn("SO unavailable (backoff={}, quotaExhausted={}); using Jina fallback",
                     backoffManager.isBackoffActive(), backoffManager.isQuotaExhausted());
-            return CompletableFuture
-                    .supplyAsync(() -> jinaClient.search(query, limit, offset, sort, tags), searchExecutor)
-                    .join();
+            try {
+                return CompletableFuture
+                        .supplyAsync(() -> jinaClient.search(query, limit, offset, sort, tags), searchExecutor)
+                        .join();
+            } catch (Exception e) {
+                log.error("Jina fallback search failed for query '{}': {}", query, e.getMessage(), e);
+            }
         }
 
         return ProviderSearchPage.empty();

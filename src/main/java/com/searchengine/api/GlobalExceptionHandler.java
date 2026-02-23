@@ -37,8 +37,11 @@ public class GlobalExceptionHandler {
         return build(status, message, request);
     }
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiErrorResponse> handleUnexpected(Exception exception, HttpServletRequest request) {
+        log.error("Unhandled exception on {} {}", request.getMethod(), request.getRequestURI(), exception);
         return build(HttpStatus.INTERNAL_SERVER_ERROR, "Unexpected server error", request);
     }
 

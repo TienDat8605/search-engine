@@ -31,3 +31,11 @@ CREATE TABLE IF NOT EXISTS query_logs (
     cache_hit BOOLEAN NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS click_events (
+    id BIGSERIAL PRIMARY KEY,
+    query_text VARCHAR(512) NOT NULL,
+    url VARCHAR(1024) NOT NULL,
+    position INT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL
+);
