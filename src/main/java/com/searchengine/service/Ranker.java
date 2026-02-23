@@ -1,13 +1,9 @@
 package com.searchengine.service;
 
-import java.time.Duration;
-import java.time.Instant;
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
-import java.util.Set;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Component;
@@ -19,89 +15,38 @@ import com.searchengine.domain.ProviderSearchResult;
 public class Ranker {
 
     public List<SearchItem> rank(String query, List<ProviderSearchResult> results, int limit) {
-    String normalizedQuery = normalize(query);
-    List<String> terms = Arrays.stream(normalizedQuery.split("\\s+"))
-                .filter(term -> !term.isBlank())
-                .toList();
-    Set<String> queryTerms = new HashSet<>(terms);
+        return rank(query, results, limit, Map.of());
+    }
 
-        return results.stream()
-                .map(result -> {
-            double relevance = relevanceScore(normalizedQuery, queryTerms, result.title(), result.snippet());
-            double quality = qualityScore(result);
-                    double freshness = freshnessScore(result.publishedAt());
-            double score = relevance + quality + freshness;
+    public List<SearchItem> rank(String query, List<ProviderSearchResult> results, int limit, Map<String, Double> clickBoosts) {
+        int n = results.size();
+        List<SearchItem> items = new ArrayList<>();
 
-                    return new SearchItem(
-                            result.questionId(),
-                            result.title(),
-                            result.source().name(),
-                            result.tags(),
-                            result.questionScore(),
-                            result.answered(),
-                            result.acceptedAnswerId() != null,
-                            result.snippet(),
-                            result.url(),
-                            score
-                    );
-                })
+        for (int i = 0; i < n; i++) {
+            ProviderSearchResult result = results.get(i);
+            // Base score preserves SO's ordering: position 0 is best, so score descends.
+            // Click boost (0–0.5) can nudge a result up by at most a few positions.
+            double positionScore = (double) (n - i) / n;
+            double clickBoost = clickBoosts.getOrDefault(result.url(), 0.0);
+            double score = positionScore + clickBoost;
+
+            items.add(new SearchItem(
+                    result.questionId(),
+                    result.title(),
+                    result.source().name(),
+                    result.tags(),
+                    result.questionScore(),
+                    result.answered(),
+                    result.acceptedAnswerId() != null,
+                    result.snippet(),
+                    result.url(),
+                    score
+            ));
+        }
+
+        return items.stream()
                 .sorted(Comparator.comparingDouble(SearchItem::score).reversed())
                 .limit(limit)
                 .collect(Collectors.toList());
-    }
-
-    private double relevanceScore(String normalizedQuery, Set<String> queryTerms, String title, String snippet) {
-        if (queryTerms.isEmpty()) {
-            return 0.0;
-        }
-
-        String normalizedTitle = normalize(title);
-        String normalizedSnippet = normalize(snippet);
-        String normalizedText = (normalizedTitle + " " + normalizedSnippet).trim();
-
-        if (normalizedText.isBlank()) {
-            return 0.0;
-        }
-
-        long textMatches = queryTerms.stream().filter(normalizedText::contains).count();
-        long titleMatches = queryTerms.stream().filter(normalizedTitle::contains).count();
-
-        double termCoverage = (double) textMatches / queryTerms.size();
-        double titleCoverage = (double) titleMatches / queryTerms.size();
-        double phraseBoost = !normalizedQuery.isBlank() && normalizedText.contains(normalizedQuery) ? 0.8 : 0.0;
-
-        return (termCoverage * 1.2) + (titleCoverage * 0.8) + phraseBoost;
-    }
-
-    private double qualityScore(ProviderSearchResult result) {
-        double sourceQuality = Math.max(0.0, result.sourceQuality());
-        double acceptedBonus = result.acceptedAnswerId() != null ? 0.35 : 0.0;
-        double answeredBonus = result.answered() ? 0.2 : 0.0;
-        double voteSignal = Math.log1p(Math.max(0, result.questionScore())) / Math.log1p(100) * 0.8;
-
-        double tagSignal = 0.0;
-        if (result.tags() != null && !result.tags().isEmpty()) {
-            tagSignal = Math.min(0.45, result.tags().size() * 0.05);
-        }
-
-        return sourceQuality + acceptedBonus + answeredBonus + voteSignal + tagSignal;
-    }
-
-    private double freshnessScore(Instant publishedAt) {
-        if (publishedAt == null) {
-            return 0.0;
-        }
-        long ageDays = Math.max(0, Duration.between(publishedAt, Instant.now()).toDays());
-        return Math.exp(-(double) ageDays / 540.0) * 0.45;
-    }
-
-    private String normalize(String text) {
-        if (text == null || text.isBlank()) {
-            return "";
-        }
-        return text.toLowerCase(Locale.ROOT)
-                .replaceAll("[^\\p{L}\\p{N}\\s]", " ")
-                .replaceAll("\\s+", " ")
-                .trim();
     }
 }

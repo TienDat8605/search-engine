@@ -26,12 +26,27 @@ server:
 search:
   embedding:
     enabled: ${EMBEDDING_ENABLED:false}
-    provider: ${EMBEDDING_PROVIDER:jina}
-    api-key: ${EMBEDDING_API_KEY:}
-    model: ${EMBEDDING_MODEL:jina-embeddings-v2-base-en}
-    dimensions: 768
+    provider: mistral
+    api-key: ${MISTRAL_API_KEY:}
+    model: mistral-embed
+    dimensions: 1024
     timeout-millis: 5000
     batch-size: 10
+  llm:
+    enabled: ${LLM_ENABLED:false}
+    base-url: https://api.mistral.ai/v1
+    api-key: ${MISTRAL_API_KEY:}
+    model: ${LLM_MODEL:mistral-small-latest}
+    max-tokens: 512
+    timeout-seconds: 10
+  jina:
+    search-api-key: ${JINA_API_KEY:}
+    search-url: https://s.jina.ai
+    timeout-millis: 8000
+  rate-limit:
+    max-concurrent: 100
+    max-requests-per-minute: 30
+    bot-check-enabled: true
   cache:
     search-ttl-minutes: 10
   enrichment:

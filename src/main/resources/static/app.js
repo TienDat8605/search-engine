@@ -115,7 +115,9 @@ function renderResults(payload) {
     const providerHasMore = typeof payload.providerHasMore === "boolean" ? payload.providerHasMore : payload.hasMore;
     nextButton.disabled = !providerHasMore;
 
+    let position = 0;
     for (const item of items) {
+        position += 1;
         const fragment = resultCardTemplate.content.cloneNode(true);
         const title = fragment.querySelector(".result-title");
         const acceptedBadge = fragment.querySelector(".badge.accepted");
@@ -128,6 +130,7 @@ function renderResults(payload) {
 
         title.textContent = item.title;
         title.href = item.link;
+        title.addEventListener("click", () => sendClickBeacon(payload.query, item.link, position));
 
         const tagText = (item.tags || []).slice(0, 8).map((tag) => `#${tag}`).join(" ");
         meta.textContent = `Score: ${item.questionScore} • Rank: ${item.score.toFixed(2)} • Source: ${item.source}${tagText ? ` • ${tagText}` : ""}`;
@@ -153,6 +156,7 @@ function renderResults(payload) {
 
         if (Number.isInteger(item.questionId) || Number.isFinite(item.questionId)) {
             detailButton.addEventListener("click", () => {
+                sendClickBeacon(payload.query, item.link, 0);
                 loadDocumentDetail(item.questionId);
             });
         } else {
@@ -265,7 +269,15 @@ function removeRelatedQuestions() {
     }
 }
 
-function renderSkeletons() {
+function sendClickBeacon(query, url, position) {
+    if (!navigator.sendBeacon) {
+        return;
+    }
+    navigator.sendBeacon(
+        "/api/events/click",
+        new Blob([JSON.stringify({ query, url, position })], { type: "application/json" })
+    );
+}
     const count = 3;
     resultsArea.innerHTML = "";
     for (let index = 0; index < count; index += 1) {

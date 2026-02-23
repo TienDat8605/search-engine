@@ -29,7 +29,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
+@SpringBootTest(properties = {"search.rate-limit.bot-check-enabled=false"})
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class ApiIntegrationTest {
@@ -39,6 +39,9 @@ class ApiIntegrationTest {
 
     @MockBean
     private StackOverflowSearchClient stackOverflowSearchClient;
+
+    @MockBean
+    private com.searchengine.integration.JinaSearchClient jinaSearchClient;
 
     @MockBean
     private SearchCacheService searchCacheService;
@@ -51,6 +54,9 @@ class ApiIntegrationTest {
         when(searchCacheService.get(anyString())).thenReturn(Optional.empty());
         doNothing().when(searchCacheService).put(anyString(), any());
         doNothing().when(asyncEnrichmentService).enqueue(anyList());
+        when(jinaSearchClient.isEnabled()).thenReturn(false);
+        when(jinaSearchClient.search(any(), anyInt(), anyInt(), any(), any()))
+                .thenReturn(ProviderSearchPage.empty());
     }
 
     @Test
