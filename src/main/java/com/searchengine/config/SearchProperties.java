@@ -17,10 +17,10 @@ public class SearchProperties {
 
     public static class Embedding {
         private boolean enabled = false;
-        private String provider = "jina";
+        private String provider = "mistral";
         private String apiKey = "";
-        private String model = "jina-embeddings-v2-base-en";
-        private int dimensions = 768;
+        private String model = "mistral-embed";
+        private int dimensions = 1024;
         private long timeoutMillis = 5000;
         private int batchSize = 10;
 
@@ -81,9 +81,18 @@ public class SearchProperties {
         }
     }
 
+    private Llm llm = new Llm();
     private Cache cache = new Cache();
     private Providers providers = new Providers();
     private Enrichment enrichment = new Enrichment();
+
+    public Llm getLlm() {
+        return llm;
+    }
+
+    public void setLlm(Llm llm) {
+        this.llm = llm;
+    }
 
     public Cache getCache() {
         return cache;
@@ -107,6 +116,63 @@ public class SearchProperties {
 
     public void setEnrichment(Enrichment enrichment) {
         this.enrichment = enrichment;
+    }
+
+    public static class Llm {
+        private boolean enabled = true;
+        private String apiKey = "";
+        private String model = "mistral-small-latest";
+        private long timeoutMillis = 15000;
+        private int maxTokens = 512;
+        private long cacheTtlMinutes = 60;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getApiKey() {
+            return apiKey;
+        }
+
+        public void setApiKey(String apiKey) {
+            this.apiKey = apiKey;
+        }
+
+        public String getModel() {
+            return model;
+        }
+
+        public void setModel(String model) {
+            this.model = model;
+        }
+
+        public long getTimeoutMillis() {
+            return timeoutMillis;
+        }
+
+        public void setTimeoutMillis(long timeoutMillis) {
+            this.timeoutMillis = timeoutMillis;
+        }
+
+        public int getMaxTokens() {
+            return maxTokens;
+        }
+
+        public void setMaxTokens(int maxTokens) {
+            this.maxTokens = maxTokens;
+        }
+
+        public long getCacheTtlMinutes() {
+            return cacheTtlMinutes;
+        }
+
+        public void setCacheTtlMinutes(long cacheTtlMinutes) {
+            this.cacheTtlMinutes = cacheTtlMinutes;
+        }
     }
 
     public static class Enrichment {

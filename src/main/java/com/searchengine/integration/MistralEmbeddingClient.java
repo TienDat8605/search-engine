@@ -7,8 +7,8 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.http.HttpHeaders;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 
@@ -16,16 +16,16 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.searchengine.config.SearchProperties;
 
 @Component
-@ConditionalOnProperty(prefix = "search.embedding", name = "provider", havingValue = "jina")
-public class JinaEmbeddingClient implements EmbeddingClient {
+@ConditionalOnProperty(prefix = "search.embedding", name = "provider", havingValue = "mistral", matchIfMissing = true)
+public class MistralEmbeddingClient implements EmbeddingClient {
 
-    private static final Logger log = LoggerFactory.getLogger(JinaEmbeddingClient.class);
-    private static final String JINA_API_URL = "https://api.jina.ai/v1/embeddings";
+    private static final Logger log = LoggerFactory.getLogger(MistralEmbeddingClient.class);
+    private static final String MISTRAL_EMBED_URL = "https://api.mistral.ai/v1/embeddings";
 
     private final WebClient webClient;
     private final SearchProperties searchProperties;
 
-    public JinaEmbeddingClient(
+    public MistralEmbeddingClient(
             @Qualifier("embeddingWebClient") WebClient webClient,
             SearchProperties searchProperties
     ) {
@@ -61,7 +61,7 @@ public class JinaEmbeddingClient implements EmbeddingClient {
             String requestBody = buildRequestBody(cfg.getModel(), texts);
 
             JsonNode response = webClient.post()
-                    .uri(JINA_API_URL)
+                    .uri(MISTRAL_EMBED_URL)
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + cfg.getApiKey())
                     .header(HttpHeaders.CONTENT_TYPE, "application/json")
                     .bodyValue(requestBody)
@@ -70,7 +70,7 @@ public class JinaEmbeddingClient implements EmbeddingClient {
                     .block(timeout);
 
             if (response == null || !response.path("data").isArray()) {
-                log.warn("Jina embedding API returned unexpected response");
+                log.warn("Mistral embedding API returned unexpected response");
                 return nullList(texts.size());
             }
 
@@ -94,7 +94,7 @@ public class JinaEmbeddingClient implements EmbeddingClient {
             return result;
 
         } catch (Exception e) {
-            log.warn("Jina embedding request failed: {}", e.getMessage());
+            log.warn("Mistral embedding request failed: {}", e.getMessage());
             return nullList(texts.size());
         }
     }
