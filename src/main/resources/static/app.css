@@ -296,6 +296,48 @@ label {
     color: #334155;
 }
 
+.badge.semantic {
+    background: #7c3aed;
+    color: #fff;
+}
+
+.related-questions {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+}
+
+.related-questions h4 {
+    margin: 0 0 10px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.related-question-card {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+}
+
+.related-question-card:last-child {
+    margin-bottom: 0;
+}
+
+.related-question-card a {
+    color: var(--brand);
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 0.9rem;
+    display: block;
+    margin-bottom: 4px;
+}
+
+.related-question-card a:hover {
+    text-decoration: underline;
+}
+
 .skeleton {
     height: 116px;
     border: 1px solid var(--line);

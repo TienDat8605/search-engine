@@ -11,6 +11,15 @@ CREATE TABLE IF NOT EXISTS documents (
     fetched_at TIMESTAMP WITH TIME ZONE NOT NULL
 );
 
+-- Enable pgvector extension
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Add embedding column if not exists
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS embedding vector(768);
+
+-- Create IVFFlat index for fast ANN search (only build when there are enough rows)
+CREATE INDEX IF NOT EXISTS documents_embedding_idx ON documents USING ivfflat (embedding vector_cosine_ops) WITH (lists = 10);
+
 CREATE TABLE IF NOT EXISTS query_logs (
     id BIGSERIAL PRIMARY KEY,
     query_text VARCHAR(512) NOT NULL,

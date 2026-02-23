@@ -37,4 +37,9 @@ Thumbs.db
 /scripts/stop-dev.sh
 /scripts/dev-status.sh
 
-report_v2.md
+.agents/
+
+# Project docs (local only)
+docs/
+
+# .github/ is intentionally tracked for Copilot instructions, agents, and prompts

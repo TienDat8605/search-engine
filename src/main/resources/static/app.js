@@ -120,6 +120,7 @@ function renderResults(payload) {
         const title = fragment.querySelector(".result-title");
         const acceptedBadge = fragment.querySelector(".badge.accepted");
         const answeredBadge = fragment.querySelector(".badge.answered");
+        const semanticBadge = fragment.querySelector(".badge.semantic");
         const meta = fragment.querySelector(".meta");
         const snippet = fragment.querySelector(".snippet");
         const tags = fragment.querySelector(".tags");
@@ -138,6 +139,9 @@ function renderResults(payload) {
         }
         if (item.answered) {
             answeredBadge.hidden = false;
+        }
+        if (payload.semanticMode === true) {
+            semanticBadge.hidden = false;
         }
 
         for (const tag of item.tags || []) {
@@ -172,9 +176,15 @@ async function loadDocumentDetail(questionId) {
     docAnswer.textContent = "Loading...";
     docSourceLink.textContent = "Open on Stack Overflow";
     docSourceLink.href = "#";
+    removeRelatedQuestions();
 
+    // Fire both requests in parallel to minimise latency.
+    const docFetch = fetch(`/api/doc/${encodeURIComponent(questionId)}`);
+    const similarFetch = fetch(`/api/similar/${encodeURIComponent(questionId)}`).catch(() => null);
+
+    let docOk = false;
     try {
-        const response = await fetch(`/api/doc/${encodeURIComponent(questionId)}`);
+        const response = await docFetch;
         const payload = await response.json();
         if (!response.ok) {
             throw new Error(extractErrorMessage(payload, response.status));
@@ -186,6 +196,7 @@ async function loadDocumentDetail(questionId) {
         docAnswer.textContent = payload.bestAnswerText || "Best answer text not enriched yet.";
         docSourceLink.textContent = "Open on Stack Overflow";
         docSourceLink.href = payload.url || "#";
+        docOk = true;
     } catch (error) {
         docTitle.textContent = "Document detail unavailable";
         docMeta.textContent = "";
@@ -193,6 +204,64 @@ async function loadDocumentDetail(questionId) {
         docAnswer.textContent = "";
         docSourceLink.textContent = "";
         docSourceLink.removeAttribute("href");
+    }
+
+    if (docOk) {
+        try {
+            const similarResp = await similarFetch;
+            if (similarResp && similarResp.ok) {
+                const similar = await similarResp.json();
+                if (Array.isArray(similar) && similar.length > 0) {
+                    renderRelatedQuestions(similar.slice(0, 5));
+                }
+            }
+        } catch {
+            // Degrade gracefully — related questions are optional.
+        }
+    }
+}
+
+function renderRelatedQuestions(items) {
+    const section = document.createElement("section");
+    section.className = "related-questions";
+
+    const heading = document.createElement("h4");
+    heading.textContent = "Related Questions";
+    section.appendChild(heading);
+
+    for (const q of items) {
+        const card = document.createElement("div");
+        card.className = "related-question-card";
+
+        const link = document.createElement("a");
+        link.href = q.link || "#";
+        link.textContent = q.title || `Question #${q.questionId}`;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        card.appendChild(link);
+
+        if (q.tags && q.tags.length > 0) {
+            const tagsDiv = document.createElement("div");
+            tagsDiv.className = "tags";
+            for (const tag of q.tags) {
+                const chip = document.createElement("span");
+                chip.className = "tag";
+                chip.textContent = tag;
+                tagsDiv.appendChild(chip);
+            }
+            card.appendChild(tagsDiv);
+        }
+
+        section.appendChild(card);
+    }
+
+    docPanel.appendChild(section);
+}
+
+function removeRelatedQuestions() {
+    const existing = docPanel.querySelector(".related-questions");
+    if (existing) {
+        existing.remove();
     }
 }
 

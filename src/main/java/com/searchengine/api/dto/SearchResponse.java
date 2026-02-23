@@ -13,6 +13,7 @@ public record SearchResponse(
         boolean providerHasMore,
         Instant generatedAt,
         int total,
-        List<SearchItem> items
+        List<SearchItem> items,
+        boolean semanticMode
 ) {
 }

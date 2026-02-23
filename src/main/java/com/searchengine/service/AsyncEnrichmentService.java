@@ -26,6 +26,7 @@ import com.searchengine.domain.SourceType;
 import com.searchengine.integration.StackExchangeBackoffManager;
 import com.searchengine.persistence.DocumentEntity;
 import com.searchengine.persistence.DocumentRepository;
+import com.searchengine.service.EmbeddingService;
 
 @Service
 public class AsyncEnrichmentService {
@@ -37,6 +38,7 @@ public class AsyncEnrichmentService {
     private final SearchProperties searchProperties;
     private final Executor enrichmentExecutor;
     private final StackExchangeBackoffManager backoffManager;
+    private final EmbeddingService embeddingService;
     private final Semaphore globalSemaphore;
     private final Map<String, Semaphore> perHostSemaphores = new ConcurrentHashMap<>();
 
@@ -45,13 +47,15 @@ public class AsyncEnrichmentService {
             DocumentRepository documentRepository,
             SearchProperties searchProperties,
             @Qualifier("enrichmentExecutor") Executor enrichmentExecutor,
-            StackExchangeBackoffManager backoffManager
+            StackExchangeBackoffManager backoffManager,
+            EmbeddingService embeddingService
     ) {
         this.webClient = webClient;
         this.documentRepository = documentRepository;
         this.searchProperties = searchProperties;
         this.enrichmentExecutor = enrichmentExecutor;
         this.backoffManager = backoffManager;
+        this.embeddingService = embeddingService;
         this.globalSemaphore = new Semaphore(Math.max(1, searchProperties.getEnrichment().getMaxConcurrentFetches()));
     }
 
@@ -109,6 +113,7 @@ public class AsyncEnrichmentService {
             entity.setTags(String.join(",", result.tags()));
             entity.setFetchedAt(Instant.now());
             documentRepository.save(entity);
+            embeddingService.generateAndStore(entity);
         } finally {
             hostSemaphore.release();
             globalSemaphore.release();

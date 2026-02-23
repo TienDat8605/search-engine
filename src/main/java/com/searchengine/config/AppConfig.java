@@ -13,7 +13,10 @@ import org.springframework.web.reactive.function.client.WebClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
+import org.springframework.scheduling.annotation.EnableScheduling;
+
 @Configuration
+@EnableScheduling
 public class AppConfig {
 
     @Bean
@@ -50,6 +53,27 @@ public class AppConfig {
         executor.setQueueCapacity(100);
         executor.setThreadNamePrefix("enrich-");
         executor.setAwaitTerminationSeconds((int) Duration.ofSeconds(5).toSeconds());
+        executor.initialize();
+        return executor;
+    }
+
+    @Bean(name = "embeddingWebClient")
+    public WebClient embeddingWebClient() {
+        return WebClient.builder()
+                .defaultHeader(HttpHeaders.USER_AGENT, "coding-meta-search-engine/0.0.1")
+                .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
+                .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(4 * 1024 * 1024))
+                .build();
+    }
+
+    @Bean(name = "embeddingExecutor")
+    public Executor embeddingExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(2);
+        executor.setQueueCapacity(50);
+        executor.setThreadNamePrefix("embed-");
+        executor.setAwaitTerminationSeconds(5);
         executor.initialize();
         return executor;
     }

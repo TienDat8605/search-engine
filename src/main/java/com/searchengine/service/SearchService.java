@@ -38,6 +38,7 @@ public class SearchService {
     private final QueryLogRepository queryLogRepository;
     private final Executor searchExecutor;
     private final AsyncEnrichmentService asyncEnrichmentService;
+    private final VectorSearchService vectorSearchService;
 
     public SearchService(
             List<ExternalSearchClient> clients,
@@ -46,7 +47,8 @@ public class SearchService {
             DocumentRepository documentRepository,
             QueryLogRepository queryLogRepository,
             @Qualifier("searchExecutor") Executor searchExecutor,
-            AsyncEnrichmentService asyncEnrichmentService
+            AsyncEnrichmentService asyncEnrichmentService,
+            VectorSearchService vectorSearchService
     ) {
         this.clients = clients;
         this.ranker = ranker;
@@ -55,6 +57,7 @@ public class SearchService {
         this.queryLogRepository = queryLogRepository;
         this.searchExecutor = searchExecutor;
         this.asyncEnrichmentService = asyncEnrichmentService;
+        this.vectorSearchService = vectorSearchService;
     }
 
     public SearchResponse search(String query, int limit, int offset, String sort, List<String> tags) {
@@ -80,6 +83,20 @@ public class SearchService {
         List<ProviderSearchResult> deduped = deduplicate(providerResults);
 
         List<SearchItem> rankedItems = ranker.rank(query, deduped, limit);
+        boolean semanticMode = false;
+
+        if (vectorSearchService != null && !rankedItems.isEmpty()) {
+            try {
+                List<SearchItem> reranked = vectorSearchService.rerank(query, rankedItems);
+                if (reranked != rankedItems) {
+                    rankedItems = reranked;
+                    semanticMode = true;
+                }
+            } catch (Exception ignored) {
+                // Fall back to original ranking on error
+            }
+        }
+
         boolean hasMore = providerPage.hasMore();
         SearchResponse response = new SearchResponse(
                 query,
@@ -91,7 +108,8 @@ public class SearchService {
                 providerPage.hasMore(),
                 Instant.now(),
                 rankedItems.size(),
-                rankedItems
+                rankedItems,
+                semanticMode
         );
         List<ProviderSearchResult> enrichmentCandidates = selectEnrichmentCandidates(deduped, rankedItems);
 

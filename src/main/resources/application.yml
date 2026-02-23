@@ -24,6 +24,14 @@ server:
   port: 8080
 
 search:
+  embedding:
+    enabled: ${EMBEDDING_ENABLED:false}
+    provider: ${EMBEDDING_PROVIDER:jina}
+    api-key: ${EMBEDDING_API_KEY:}
+    model: ${EMBEDDING_MODEL:jina-embeddings-v2-base-en}
+    dimensions: 768
+    timeout-millis: 5000
+    batch-size: 10
   cache:
     search-ttl-minutes: 10
   enrichment:
