@@ -5,6 +5,10 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/search_engine}
     username: ${DB_USER:postgres}
     password: ${DB_PASSWORD:postgres}
+  sql:
+    init:
+      # All statements in schema.sql use IF NOT EXISTS, making this idempotent on every restart.
+      mode: always
   jpa:
     hibernate:
       ddl-auto: update
@@ -26,12 +30,19 @@ server:
 search:
   embedding:
     enabled: ${EMBEDDING_ENABLED:false}
-    provider: ${EMBEDDING_PROVIDER:jina}
-    api-key: ${EMBEDDING_API_KEY:}
-    model: ${EMBEDDING_MODEL:jina-embeddings-v2-base-en}
-    dimensions: 768
+    provider: ${EMBEDDING_PROVIDER:mistral}
+    api-key: ${MISTRAL_API_KEY:}
+    model: ${EMBEDDING_MODEL:mistral-embed}
+    dimensions: 1024
     timeout-millis: 5000
     batch-size: 10
+  llm:
+    enabled: ${LLM_ENABLED:true}
+    api-key: ${MISTRAL_API_KEY:}
+    model: ${LLM_MODEL:mistral-small-latest}
+    timeout-millis: 15000
+    max-tokens: 512
+    cache-ttl-minutes: 60
   cache:
     search-ttl-minutes: 10
   enrichment:

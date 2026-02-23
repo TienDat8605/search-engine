@@ -19,10 +19,16 @@ const docQuestion = document.getElementById("docQuestion");
 const docAnswer = document.getElementById("docAnswer");
 const docSourceLink = document.getElementById("docSourceLink");
 const docCloseButton = document.getElementById("docCloseButton");
+const aiOverview = document.getElementById("ai-overview");
+const aiOverviewContent = document.getElementById("ai-overview-content");
+const aiCitations = document.getElementById("ai-citations");
 
 let currentOffset = 0;
 
 initializeFromUrl();
+if (queryInput.value.trim()) {
+    runSearch();
+}
 
 searchForm.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -45,6 +51,9 @@ nextButton.addEventListener("click", async () => {
 
 window.addEventListener("popstate", () => {
     initializeFromUrl();
+    if (queryInput.value.trim()) {
+        runSearch();
+    }
 });
 
 docCloseButton.addEventListener("click", () => {
@@ -74,9 +83,13 @@ async function runSearch() {
     renderSkeletons();
     updatePager(0);
     updateUrl(params);
+    showAiSkeleton();
+
+    const searchFetch = fetch(`/api/search?${params.toString()}`);
+    const aiFetch = fetchAiOverview(query);
 
     try {
-        const response = await fetch(`/api/search?${params.toString()}`);
+        const response = await searchFetch;
         const payload = await response.json();
 
         if (!response.ok) {
@@ -91,6 +104,8 @@ async function runSearch() {
     } finally {
         setLoading(false);
     }
+
+    await aiFetch;
 }
 
 function renderResults(payload) {
@@ -161,6 +176,62 @@ function renderResults(payload) {
         }
 
         resultsArea.appendChild(fragment);
+    }
+}
+
+async function fetchAiOverview(query) {
+    try {
+        const response = await fetch(`/api/ask?q=${encodeURIComponent(query)}`);
+        if (!response.ok) {
+            hideAiOverview();
+            return;
+        }
+        const payload = await response.json();
+        renderAiOverview(payload);
+    } catch {
+        hideAiOverview();
+    }
+}
+
+function showAiSkeleton() {
+    aiOverview.hidden = false;
+    aiOverviewContent.innerHTML = '<div class="skeleton ai-skeleton"></div>';
+    aiCitations.hidden = true;
+    aiCitations.innerHTML = "";
+}
+
+function hideAiOverview() {
+    aiOverview.hidden = true;
+    aiOverviewContent.innerHTML = "";
+    aiCitations.hidden = true;
+    aiCitations.innerHTML = "";
+}
+
+function renderAiOverview(payload) {
+    if (!payload || !payload.overview) {
+        hideAiOverview();
+        return;
+    }
+
+    aiOverview.hidden = false;
+    aiOverviewContent.textContent = payload.overview;
+
+    const citations = payload.citations || [];
+    if (citations.length > 0) {
+        aiCitations.hidden = false;
+        aiCitations.innerHTML = "";
+        for (const c of citations) {
+            const li = document.createElement("li");
+            const link = document.createElement("a");
+            link.href = c.url || "#";
+            link.textContent = c.title || `Source ${c.index}`;
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+            li.appendChild(link);
+            aiCitations.appendChild(li);
+        }
+    } else {
+        aiCitations.hidden = true;
     }
 }
 

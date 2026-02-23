@@ -14,8 +14,8 @@ CREATE TABLE IF NOT EXISTS documents (
 -- Enable pgvector extension
 CREATE EXTENSION IF NOT EXISTS vector;
 
--- Add embedding column if not exists
-ALTER TABLE documents ADD COLUMN IF NOT EXISTS embedding vector(768);
+-- Add embedding column if not exists (1024 dimensions for mistral-embed)
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS embedding vector(1024);
 
 -- Create IVFFlat index for fast ANN search (only build when there are enough rows)
 CREATE INDEX IF NOT EXISTS documents_embedding_idx ON documents USING ivfflat (embedding vector_cosine_ops) WITH (lists = 10);

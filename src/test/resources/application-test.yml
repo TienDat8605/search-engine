@@ -19,3 +19,5 @@ search:
     search-ttl-minutes: 10
   enrichment:
     enabled: false
+  llm:
+    enabled: false
