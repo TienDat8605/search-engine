@@ -5,6 +5,10 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/search_engine}
     username: ${DB_USER:postgres}
     password: ${DB_PASSWORD:postgres}
+  sql:
+    init:
+      # All statements in schema.sql use IF NOT EXISTS, making this idempotent on every restart.
+      mode: always
   jpa:
     hibernate:
       ddl-auto: update

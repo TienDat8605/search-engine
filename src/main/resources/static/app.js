@@ -23,6 +23,9 @@ const docCloseButton = document.getElementById("docCloseButton");
 let currentOffset = 0;
 
 initializeFromUrl();
+if (queryInput.value.trim()) {
+    runSearch();
+}
 
 searchForm.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -45,6 +48,9 @@ nextButton.addEventListener("click", async () => {
 
 window.addEventListener("popstate", () => {
     initializeFromUrl();
+    if (queryInput.value.trim()) {
+        runSearch();
+    }
 });
 
 docCloseButton.addEventListener("click", () => {
