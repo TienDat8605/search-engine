@@ -367,3 +367,101 @@ label {
         align-items: stretch;
     }
 }
+
+/* ── AI Overview panel ───────────────────────────────────────────────────── */
+.ai-overview {
+    background: #f0f7ff;
+    border: 1px solid #c0d8f0;
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.25rem;
+}
+
+.ai-overview-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.ai-label {
+    font-weight: 700;
+    font-size: 0.85rem;
+    background: #1a73e8;
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.03em;
+}
+
+.ai-disclaimer {
+    font-size: 0.78rem;
+    color: #666;
+}
+
+.ai-content p {
+    margin: 0 0 0.5rem;
+    line-height: 1.6;
+    color: #202124;
+}
+
+.ai-citation {
+    color: #1a73e8;
+    font-size: 0.82em;
+    text-decoration: none;
+    vertical-align: super;
+}
+.ai-citation:hover {
+    text-decoration: underline;
+}
+
+.ai-citations {
+    border-top: 1px solid #d0e4f7;
+    margin-top: 0.75rem;
+    padding-top: 0.5rem;
+}
+
+.ai-citation-list {
+    list-style: decimal;
+    padding-left: 1.2rem;
+    margin: 0;
+}
+
+.ai-citation-list li {
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: #555;
+}
+
+.ai-citation-link {
+    color: #1a73e8;
+    text-decoration: none;
+}
+.ai-citation-link:hover {
+    text-decoration: underline;
+}
+
+/* Skeleton loading for AI overview */
+.ai-skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.ai-skeleton-line {
+    height: 14px;
+    background: linear-gradient(90deg, #d0e8ff 25%, #e8f4ff 50%, #d0e8ff 75%);
+    background-size: 200% 100%;
+    border-radius: 4px;
+    animation: shimmer 1.5s infinite;
+    width: 100%;
+}
+
+.ai-skeleton-line.short {
+    width: 60%;
+}
+
+@keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}

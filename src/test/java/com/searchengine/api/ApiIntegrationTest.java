@@ -1,9 +1,12 @@
 package com.searchengine.api;
 
+import com.searchengine.api.dto.AiOverviewResponse;
 import com.searchengine.domain.ProviderSearchResult;
 import com.searchengine.domain.SourceType;
 import com.searchengine.integration.ProviderSearchPage;
 import com.searchengine.integration.StackOverflowSearchClient;
+import com.searchengine.service.AiCacheService;
+import com.searchengine.service.AiOverviewService;
 import com.searchengine.service.AsyncEnrichmentService;
 import com.searchengine.service.SearchCacheService;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,7 +32,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest(properties = {"search.rate-limit.bot-check-enabled=false"})
+@SpringBootTest(properties = {
+        "search.rate-limit.bot-check-enabled=false",
+        "search.llm.enabled=false"
+})
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class ApiIntegrationTest {
@@ -49,6 +55,12 @@ class ApiIntegrationTest {
     @MockBean
     private AsyncEnrichmentService asyncEnrichmentService;
 
+    @MockBean
+    private AiOverviewService aiOverviewService;
+
+    @MockBean
+    private AiCacheService aiCacheService;
+
     @BeforeEach
     void setup() {
         when(searchCacheService.get(anyString())).thenReturn(Optional.empty());
@@ -57,6 +69,8 @@ class ApiIntegrationTest {
         when(jinaSearchClient.isEnabled()).thenReturn(false);
         when(jinaSearchClient.search(any(), anyInt(), anyInt(), any(), any()))
                 .thenReturn(ProviderSearchPage.empty());
+        when(aiOverviewService.isEnabled()).thenReturn(false);
+        when(aiCacheService.get(anyString())).thenReturn(Optional.empty());
     }
 
     @Test
@@ -64,8 +78,8 @@ class ApiIntegrationTest {
         ProviderSearchResult sample = new ProviderSearchResult(
                 12345L,
                 "https://stackoverflow.com/questions/12345/example",
-                                "How to fix dependency injection in Spring Boot?",
-                                "Use constructor injection and avoid field injection.",
+                "How to fix dependency injection in Spring Boot?",
+                "Use constructor injection and avoid field injection.",
                 SourceType.STACKOVERFLOW,
                 42,
                 true,
@@ -99,12 +113,12 @@ class ApiIntegrationTest {
     }
 
     @Test
-        void searchEndpoint_usesProviderSnippetNotGenericPlaceholder() throws Exception {
+    void searchEndpoint_usesProviderSnippetNotGenericPlaceholder() throws Exception {
         ProviderSearchResult sample = new ProviderSearchResult(
                 456L,
                 "https://stackoverflow.com/questions/456/example",
-                                "Spring & Boot: can't parse UTF-8?",
-                                "Use HttpMessageConverter with UTF-8 and decode entities.",
+                "Spring & Boot: can't parse UTF-8?",
+                "Use HttpMessageConverter with UTF-8 and decode entities.",
                 SourceType.STACKOVERFLOW,
                 30,
                 true,
@@ -160,5 +174,13 @@ class ApiIntegrationTest {
                 .andExpect(jsonPath("$.totalQueries").value(1))
                 .andExpect(jsonPath("$.queriesLast24Hours").value(1))
                 .andExpect(jsonPath("$.topQueries[0].query").value("redis cache spring"));
+    }
+
+    @Test
+    void askEndpoint_returnsEmptyWhenLlmDisabled() throws Exception {
+        mockMvc.perform(get("/api/ask").param("q", "how to fix nullpointerexception"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.answer").value(""))
+                .andExpect(jsonPath("$.citations").isArray());
     }
 }

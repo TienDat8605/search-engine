@@ -12,6 +12,9 @@ const queryMeta = document.getElementById("queryMeta");
 const prevButton = document.getElementById("prevButton");
 const nextButton = document.getElementById("nextButton");
 const pageLabel = document.getElementById("pageLabel");
+const aiOverview = document.getElementById("ai-overview");
+const aiContent = document.getElementById("ai-content");
+const aiCitations = document.getElementById("ai-citations");
 const docPanel = document.getElementById("docPanel");
 const docTitle = document.getElementById("docTitle");
 const docMeta = document.getElementById("docMeta");
@@ -84,6 +87,7 @@ async function runSearch() {
         }
 
         renderResults(payload);
+        fetchAiOverview(payload.query);
     } catch (error) {
         toolbar.hidden = true;
         resultsArea.innerHTML = "";
@@ -119,6 +123,10 @@ function renderResults(payload) {
     for (const item of items) {
         position += 1;
         const fragment = resultCardTemplate.content.cloneNode(true);
+        const card = fragment.querySelector("article");
+        if (card && (Number.isInteger(item.questionId) || Number.isFinite(item.questionId))) {
+            card.id = `q-${item.questionId}`;
+        }
         const title = fragment.querySelector(".result-title");
         const acceptedBadge = fragment.querySelector(".badge.accepted");
         const answeredBadge = fragment.querySelector(".badge.answered");
@@ -352,3 +360,57 @@ function extractErrorMessage(payload, status) {
 toolbar.hidden = true;
 resultsArea.innerHTML = "";
 setStatus("Type a query and press Search.");
+
+/** Asynchronously fetches AI overview and renders it above the results. Fails silently. */
+async function fetchAiOverview(query) {
+    aiOverview.hidden = true;
+    aiContent.innerHTML = "";
+    aiCitations.innerHTML = "";
+
+    // Show skeleton while in-flight
+    aiOverview.hidden = false;
+    aiContent.innerHTML = '<div class="ai-skeleton"><div class="ai-skeleton-line"></div><div class="ai-skeleton-line short"></div></div>';
+
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+        const response = await fetch(`/api/ask?q=${encodeURIComponent(query)}`, {
+            signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+            aiOverview.hidden = true;
+            return;
+        }
+
+        const data = await response.json();
+        if (!data || !data.answer || data.answer.trim() === "") {
+            aiOverview.hidden = true;
+            return;
+        }
+
+        // Render answer (already HTML-safe with inline citation anchors from backend)
+        aiContent.innerHTML = `<p>${data.answer}</p>`;
+
+        // Render citation footnotes
+        if (data.citations && data.citations.length > 0) {
+            const ol = document.createElement("ol");
+            ol.className = "ai-citation-list";
+            for (const cite of data.citations) {
+                const li = document.createElement("li");
+                const a = document.createElement("a");
+                a.href = `#q-${cite.questionId}`;
+                a.textContent = cite.title || cite.url;
+                a.className = "ai-citation-link";
+                li.appendChild(a);
+                ol.appendChild(li);
+            }
+            aiCitations.appendChild(ol);
+        }
+    } catch (_) {
+        // Timeout or network error — hide silently
+        aiOverview.hidden = true;
+    }
+}
