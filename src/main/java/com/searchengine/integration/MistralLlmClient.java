@@ -1,6 +1,8 @@
 package com.searchengine.integration;
 
 import java.time.Duration;
+import java.util.List;
+import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,6 +12,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.searchengine.config.SearchProperties;
 
 @Component
@@ -20,13 +23,16 @@ public class MistralLlmClient implements LlmClient {
 
     private final WebClient webClient;
     private final SearchProperties searchProperties;
+    private final ObjectMapper objectMapper;
 
     public MistralLlmClient(
             @Qualifier("llmWebClient") WebClient webClient,
-            SearchProperties searchProperties
+            SearchProperties searchProperties,
+            ObjectMapper objectMapper
     ) {
         this.webClient = webClient;
         this.searchProperties = searchProperties;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -45,7 +51,14 @@ public class MistralLlmClient implements LlmClient {
         Duration timeout = Duration.ofMillis(cfg.getTimeoutMillis());
 
         try {
-            String requestBody = buildRequestBody(cfg.getModel(), cfg.getMaxTokens(), systemPrompt, userPrompt);
+            String requestBody = objectMapper.writeValueAsString(Map.of(
+                    "model", cfg.getModel(),
+                    "max_tokens", cfg.getMaxTokens(),
+                    "messages", List.of(
+                            Map.of("role", "system", "content", systemPrompt),
+                            Map.of("role", "user", "content", userPrompt)
+                    )
+            ));
 
             JsonNode response = webClient.post()
                     .uri(MISTRAL_CHAT_URL)
@@ -67,23 +80,5 @@ public class MistralLlmClient implements LlmClient {
             log.warn("Mistral LLM request failed: {}", e.getMessage());
             return null;
         }
-    }
-
-    private String buildRequestBody(String model, int maxTokens, String systemPrompt, String userPrompt) {
-        return "{\"model\":\"" + escapeJson(model) + "\""
-                + ",\"max_tokens\":" + maxTokens
-                + ",\"messages\":["
-                + "{\"role\":\"system\",\"content\":\"" + escapeJson(systemPrompt) + "\"}"
-                + ",{\"role\":\"user\",\"content\":\"" + escapeJson(userPrompt) + "\"}"
-                + "]}";
-    }
-
-    private String escapeJson(String value) {
-        if (value == null) return "";
-        return value.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t");
     }
 }

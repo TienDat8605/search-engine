@@ -3,6 +3,7 @@ package com.searchengine.integration;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.searchengine.config.SearchProperties;
 
 @Component
@@ -24,13 +26,16 @@ public class MistralEmbeddingClient implements EmbeddingClient {
 
     private final WebClient webClient;
     private final SearchProperties searchProperties;
+    private final ObjectMapper objectMapper;
 
     public MistralEmbeddingClient(
             @Qualifier("embeddingWebClient") WebClient webClient,
-            SearchProperties searchProperties
+            SearchProperties searchProperties,
+            ObjectMapper objectMapper
     ) {
         this.webClient = webClient;
         this.searchProperties = searchProperties;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -58,7 +63,8 @@ public class MistralEmbeddingClient implements EmbeddingClient {
         Duration timeout = Duration.ofMillis(cfg.getTimeoutMillis());
 
         try {
-            String requestBody = buildRequestBody(cfg.getModel(), texts);
+            String requestBody = objectMapper.writeValueAsString(
+                    Map.of("model", cfg.getModel(), "input", texts));
 
             JsonNode response = webClient.post()
                     .uri(MISTRAL_EMBED_URL)
@@ -97,27 +103,6 @@ public class MistralEmbeddingClient implements EmbeddingClient {
             log.warn("Mistral embedding request failed: {}", e.getMessage());
             return nullList(texts.size());
         }
-    }
-
-    private String buildRequestBody(String model, List<String> texts) {
-        StringBuilder sb = new StringBuilder("{\"model\":\"");
-        sb.append(escapeJson(model));
-        sb.append("\",\"input\":[");
-        for (int i = 0; i < texts.size(); i++) {
-            if (i > 0) sb.append(",");
-            sb.append("\"").append(escapeJson(texts.get(i))).append("\"");
-        }
-        sb.append("]}");
-        return sb.toString();
-    }
-
-    private String escapeJson(String value) {
-        if (value == null) return "";
-        return value.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t");
     }
 
     private List<float[]> nullList(int size) {
