@@ -352,6 +352,62 @@ label {
     100% { background-position: -200% 0; }
 }
 
+.ai-overview {
+    margin-top: 14px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--brand-soft);
+    padding: 14px;
+}
+
+.ai-overview-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.ai-badge {
+    background: var(--brand);
+    color: #fff;
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.ai-overview-content {
+    line-height: 1.6;
+    color: var(--text);
+    white-space: pre-wrap;
+    font-size: 0.97rem;
+}
+
+.ai-citations {
+    margin: 10px 0 0;
+    padding-left: 20px;
+    font-size: 0.85rem;
+    color: var(--muted);
+}
+
+.ai-citations li {
+    margin-bottom: 4px;
+}
+
+.ai-citations a {
+    color: var(--brand);
+    text-decoration: none;
+}
+
+.ai-citations a:hover {
+    text-decoration: underline;
+}
+
+.ai-skeleton {
+    height: 80px;
+}
+
 @media (max-width: 768px) {
     .filters {
         grid-template-columns: 1fr;

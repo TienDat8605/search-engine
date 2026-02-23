@@ -1,68 +1,83 @@
 package com.searchengine.integration;
 
-import com.searchengine.config.SearchProperties;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.stereotype.Component;
-import org.springframework.web.reactive.function.client.WebClient;
-
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.http.HttpHeaders;
+import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.WebClient;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.searchengine.config.SearchProperties;
 
 @Component
 public class MistralLlmClient implements LlmClient {
 
     private static final Logger log = LoggerFactory.getLogger(MistralLlmClient.class);
+    private static final String MISTRAL_CHAT_URL = "https://api.mistral.ai/v1/chat/completions";
 
-    private final WebClient client;
-    private final SearchProperties props;
+    private final WebClient webClient;
+    private final SearchProperties searchProperties;
+    private final ObjectMapper objectMapper;
 
     public MistralLlmClient(
-            @Qualifier("mistralWebClient") WebClient client,
-            SearchProperties props) {
-        this.client = client;
-        this.props = props;
+            @Qualifier("llmWebClient") WebClient webClient,
+            SearchProperties searchProperties,
+            ObjectMapper objectMapper
+    ) {
+        this.webClient = webClient;
+        this.searchProperties = searchProperties;
+        this.objectMapper = objectMapper;
     }
 
     @Override
     public boolean isEnabled() {
-        return props.getLlm().isEnabled() && !props.getLlm().getApiKey().isBlank();
+        SearchProperties.Llm cfg = searchProperties.getLlm();
+        return cfg.isEnabled() && !cfg.getApiKey().isBlank();
     }
 
     @Override
-    public String generate(String systemPrompt, String userPrompt) {
-        if (!isEnabled()) return null;
+    public String complete(String systemPrompt, String userPrompt) {
+        if (!isEnabled()) {
+            return null;
+        }
+
+        SearchProperties.Llm cfg = searchProperties.getLlm();
+        Duration timeout = Duration.ofMillis(cfg.getTimeoutMillis());
+
         try {
-            Map<String, Object> body = Map.of(
-                    "model", props.getLlm().getModel(),
-                    "max_tokens", props.getLlm().getMaxTokens(),
-                    "temperature", 0.1,
+            String requestBody = objectMapper.writeValueAsString(Map.of(
+                    "model", cfg.getModel(),
+                    "max_tokens", cfg.getMaxTokens(),
                     "messages", List.of(
                             Map.of("role", "system", "content", systemPrompt),
                             Map.of("role", "user", "content", userPrompt)
                     )
-            );
+            ));
 
-            Map<?, ?> response = client.post()
-                    .uri(props.getLlm().getBaseUrl() + "/chat/completions")
-                    .header("Authorization", "Bearer " + props.getLlm().getApiKey())
-                    .bodyValue(body)
+            JsonNode response = webClient.post()
+                    .uri(MISTRAL_CHAT_URL)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + cfg.getApiKey())
+                    .header(HttpHeaders.CONTENT_TYPE, "application/json")
+                    .bodyValue(requestBody)
                     .retrieve()
-                    .bodyToMono(Map.class)
-                    .timeout(Duration.ofSeconds(props.getLlm().getTimeoutSeconds()))
-                    .block();
+                    .bodyToMono(JsonNode.class)
+                    .block(timeout);
 
-            if (response == null) return null;
+            if (response == null || !response.path("choices").isArray() || response.path("choices").isEmpty()) {
+                log.warn("Mistral LLM API returned unexpected response");
+                return null;
+            }
 
-            List<?> choices = (List<?>) response.get("choices");
-            if (choices == null || choices.isEmpty()) return null;
+            return response.path("choices").get(0).path("message").path("content").asText(null);
 
-            Map<?, ?> message = (Map<?, ?>) ((Map<?, ?>) choices.get(0)).get("message");
-            return message == null ? null : (String) message.get("content");
         } catch (Exception e) {
-            log.error("Mistral LLM call failed: {}", e.getMessage());
+            log.warn("Mistral LLM request failed: {}", e.getMessage());
             return null;
         }
     }

@@ -1,135 +1,135 @@
 package com.searchengine.service;
 
-import com.searchengine.api.dto.AiOverviewResponse;
-import com.searchengine.integration.LlmClient;
-import com.searchengine.persistence.DocumentEntity;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.web.util.HtmlUtils;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.searchengine.api.dto.AiOverviewResponse;
+import com.searchengine.api.dto.SearchItem;
+import com.searchengine.api.dto.SearchResponse;
+import com.searchengine.config.SearchProperties;
+import com.searchengine.integration.LlmClient;
 
 @Service
 public class AiOverviewService {
 
     private static final Logger log = LoggerFactory.getLogger(AiOverviewService.class);
-    private static final int MAX_SOURCES = 5;
-    private static final int MAX_CONTENT_CHARS = 600;
-    // Matches [SO-1], [SO-12], etc.
-    private static final Pattern CITATION_PATTERN = Pattern.compile("\\[SO-(\\d+)]");
+    private static final String CACHE_KEY_PREFIX = "ai:v1:";
+    private static final int CONTEXT_DOC_LIMIT = 5;
 
-    private static final String SYSTEM_PROMPT = """
-            You are a technical assistant that answers programming questions using only the provided Stack Overflow sources.
-            Rules:
-            - Answer using ONLY the information from the numbered sources provided.
-            - Cite every factual claim with [SO-n] immediately after the claim, where n is the source number.
-            - If a claim draws from multiple sources, cite all of them: [SO-1][SO-3].
-            - If the sources do not contain enough information to answer reliably, respond exactly with: "I don't have enough information from these sources."
-            - Do not use your own parametric knowledge. Do not hallucinate.
-            - Keep the answer concise: 3-5 sentences maximum.
-            - Do not use markdown headers or bullet points. Write in plain prose.
-            """;
+    private static final String SYSTEM_PROMPT =
+            "You are a helpful coding assistant that provides concise, accurate summaries of Stack Overflow answers. "
+            + "Given the following search results, provide a clear and helpful overview that directly answers the user's question. "
+            + "Reference specific answers using [SO-1], [SO-2] notation when citing a source. "
+            + "Keep the overview to 3-5 sentences. Focus on practical, actionable information.";
 
     private final LlmClient llmClient;
+    private final SearchService searchService;
+    private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
+    private final Duration cacheTtl;
 
-    public AiOverviewService(LlmClient llmClient) {
+    public AiOverviewService(
+            LlmClient llmClient,
+            SearchService searchService,
+            StringRedisTemplate redisTemplate,
+            ObjectMapper objectMapper,
+            SearchProperties searchProperties
+    ) {
         this.llmClient = llmClient;
+        this.searchService = searchService;
+        this.redisTemplate = redisTemplate;
+        this.objectMapper = objectMapper;
+        this.cacheTtl = Duration.ofMinutes(searchProperties.getLlm().getCacheTtlMinutes());
     }
 
     public boolean isEnabled() {
         return llmClient.isEnabled();
     }
 
-    /**
-     * Generates an AI overview grounded in the provided enriched documents.
-     * Only documents with non-blank bestAnswerText are used (cold-start safe).
-     *
-     * @param query the user's search query
-     * @param candidates enriched DocumentEntity results (top-N, ordered by rank)
-     * @return AiOverviewResponse with HTML-safe answer and citation list, or empty on failure
-     */
-    public AiOverviewResponse generate(String query, List<DocumentEntity> candidates) {
-        List<DocumentEntity> enriched = candidates.stream()
-                .filter(d -> d.getBestAnswerText() != null && !d.getBestAnswerText().isBlank())
-                .limit(MAX_SOURCES)
-                .toList();
+    public AiOverviewResponse generateOverview(String query) {
+        String cacheKey = buildCacheKey(query);
 
-        if (enriched.isEmpty()) {
-            log.debug("No enriched documents available for AI overview, skipping");
-            return AiOverviewResponse.empty();
+        AiOverviewResponse cached = tryGetFromCache(cacheKey);
+        if (cached != null) {
+            return new AiOverviewResponse(cached.overview(), cached.citations(), true);
         }
 
-        // Build citation map: 1-indexed source number → document
-        Map<Integer, DocumentEntity> citationMap = new HashMap<>();
-        StringBuilder userPrompt = new StringBuilder();
-        userPrompt.append("Sources:\n\n");
+        SearchResponse searchResults = searchService.search(query, CONTEXT_DOC_LIMIT, 0, "relevance", List.of());
+        List<SearchItem> items = searchResults.items();
 
-        for (int i = 0; i < enriched.size(); i++) {
-            int n = i + 1;
-            DocumentEntity doc = enriched.get(i);
-            citationMap.put(n, doc);
-
-            String content = doc.getBestAnswerText().length() > MAX_CONTENT_CHARS
-                    ? doc.getBestAnswerText().substring(0, MAX_CONTENT_CHARS) + "..."
-                    : doc.getBestAnswerText();
-
-            userPrompt.append("[SO-").append(n).append("] Title: \"").append(doc.getTitle()).append("\"\n");
-            userPrompt.append("Content: ").append(content).append("\n\n");
+        if (items.isEmpty()) {
+            return new AiOverviewResponse("No relevant results found to generate an overview.", List.of(), false);
         }
 
-        userPrompt.append("Question: ").append(query);
+        String userPrompt = buildUserPrompt(query, items);
+        String rawOverview = llmClient.complete(SYSTEM_PROMPT, userPrompt);
 
-        String raw = llmClient.generate(SYSTEM_PROMPT, userPrompt.toString());
-        if (raw == null || raw.isBlank()
-                || raw.contains("I don't have enough information from these sources")) {
-            return AiOverviewResponse.empty();
+        if (rawOverview == null || rawOverview.isBlank()) {
+            log.warn("LLM returned empty response for query: {}", query);
+            return new AiOverviewResponse("Unable to generate an overview at this time.", List.of(), false);
         }
 
-        return buildResponse(raw, citationMap);
+        List<AiOverviewResponse.Citation> citations = buildCitations(items);
+        AiOverviewResponse response = new AiOverviewResponse(rawOverview.trim(), citations, false);
+
+        tryPutInCache(cacheKey, response);
+        return response;
     }
 
-    /**
-     * Replaces [SO-n] markers with inline anchor links and builds the citation footnotes list.
-     * Sanitises LLM output to prevent XSS — only [SO-n] inline anchors are preserved.
-     */
-    private AiOverviewResponse buildResponse(String raw, Map<Integer, DocumentEntity> citationMap) {
-        // First escape all HTML from LLM output to prevent XSS
-        String escaped = HtmlUtils.htmlEscape(raw);
-
-        // Then replace escaped [SO-n] markers with trusted anchor tags
-        Matcher m = CITATION_PATTERN.matcher(escaped);
-        StringBuffer answer = new StringBuffer();
-        List<Integer> referencedNums = new ArrayList<>();
-
-        while (m.find()) {
-            int n = Integer.parseInt(m.group(1));
-            if (citationMap.containsKey(n)) {
-                DocumentEntity doc = citationMap.get(n);
-                long qId = doc.getQuestionId() != null ? doc.getQuestionId() : 0;
-                String link = "<a href=\"#q-" + qId + "\" class=\"ai-citation\">[" + n + "]</a>";
-                m.appendReplacement(answer, Matcher.quoteReplacement(link));
-                if (!referencedNums.contains(n)) referencedNums.add(n);
-            } else {
-                m.appendReplacement(answer, Matcher.quoteReplacement(m.group(0)));
-            }
+    private String buildUserPrompt(String query, List<SearchItem> items) {
+        StringBuilder sb = new StringBuilder("Question: ").append(query).append("\n\nSources:\n");
+        for (int i = 0; i < items.size(); i++) {
+            SearchItem item = items.get(i);
+            sb.append("[SO-").append(i + 1).append("] ")
+              .append(item.title())
+              .append(": ")
+              .append(item.snippet() != null ? item.snippet() : "No snippet available.")
+              .append("\n");
         }
-        m.appendTail(answer);
+        sb.append("\nPlease provide a concise overview that answers the question above, citing sources as [SO-n].");
+        return sb.toString();
+    }
 
-        // Build citation footnotes only for actually-referenced sources
-        List<AiOverviewResponse.Citation> citations = referencedNums.stream()
-                .filter(citationMap::containsKey)
-                .map(n -> {
-                    DocumentEntity doc = citationMap.get(n);
-                    return new AiOverviewResponse.Citation(doc.getQuestionId(), doc.getTitle(), doc.getUrl());
-                })
-                .toList();
+    private List<AiOverviewResponse.Citation> buildCitations(List<SearchItem> items) {
+        List<AiOverviewResponse.Citation> citations = new ArrayList<>();
+        for (int i = 0; i < items.size(); i++) {
+            SearchItem item = items.get(i);
+            citations.add(new AiOverviewResponse.Citation(i + 1, item.title(), item.link()));
+        }
+        return citations;
+    }
 
-        return new AiOverviewResponse(answer.toString(), citations);
+    private String buildCacheKey(String query) {
+        return CACHE_KEY_PREFIX + query.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
+    }
+
+    private AiOverviewResponse tryGetFromCache(String key) {
+        try {
+            String value = redisTemplate.opsForValue().get(key);
+            if (value == null || value.isBlank()) {
+                return null;
+            }
+            return objectMapper.readValue(value, AiOverviewResponse.class);
+        } catch (Exception e) {
+            log.warn("Failed to read AI overview from cache for key {}: {}", key, e.getMessage());
+            return null;
+        }
+    }
+
+    private void tryPutInCache(String key, AiOverviewResponse response) {
+        try {
+            String payload = objectMapper.writeValueAsString(response);
+            redisTemplate.opsForValue().set(key, payload, cacheTtl);
+        } catch (Exception e) {
+            log.warn("Failed to cache AI overview for key {}: {}", key, e.getMessage());
+        }
     }
 }

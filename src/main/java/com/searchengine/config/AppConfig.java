@@ -87,4 +87,13 @@ public class AppConfig {
         executor.initialize();
         return executor;
     }
+
+    @Bean(name = "llmWebClient")
+    public WebClient llmWebClient() {
+        return WebClient.builder()
+                .defaultHeader(HttpHeaders.USER_AGENT, "coding-meta-search-engine/0.0.1")
+                .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
+                .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(2 * 1024 * 1024))
+                .build();
+    }
 }

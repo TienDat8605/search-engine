@@ -1,76 +1,115 @@
 package com.searchengine.integration;
 
-import com.searchengine.config.SearchProperties;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.stereotype.Component;
-import org.springframework.web.reactive.function.client.WebClient;
-
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.http.HttpHeaders;
+import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.WebClient;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.searchengine.config.SearchProperties;
+
 @Component
+@ConditionalOnProperty(prefix = "search.embedding", name = "provider", havingValue = "mistral", matchIfMissing = true)
 public class MistralEmbeddingClient implements EmbeddingClient {
 
     private static final Logger log = LoggerFactory.getLogger(MistralEmbeddingClient.class);
+    private static final String MISTRAL_EMBED_URL = "https://api.mistral.ai/v1/embeddings";
 
-    private final WebClient client;
-    private final SearchProperties props;
+    private final WebClient webClient;
+    private final SearchProperties searchProperties;
+    private final ObjectMapper objectMapper;
 
     public MistralEmbeddingClient(
-            @Qualifier("mistralWebClient") WebClient client,
-            SearchProperties props) {
-        this.client = client;
-        this.props = props;
+            @Qualifier("embeddingWebClient") WebClient webClient,
+            SearchProperties searchProperties,
+            ObjectMapper objectMapper
+    ) {
+        this.webClient = webClient;
+        this.searchProperties = searchProperties;
+        this.objectMapper = objectMapper;
     }
 
     @Override
     public boolean isEnabled() {
-        return props.getEmbedding().isEnabled() && !props.getEmbedding().getApiKey().isBlank();
+        SearchProperties.Embedding cfg = searchProperties.getEmbedding();
+        return cfg.isEnabled() && !cfg.getApiKey().isBlank();
     }
 
     @Override
     public float[] embed(String text) {
+        if (!isEnabled() || text == null || text.isBlank()) {
+            return null;
+        }
         List<float[]> results = embedBatch(List.of(text));
         return results.isEmpty() ? null : results.get(0);
     }
 
     @Override
     public List<float[]> embedBatch(List<String> texts) {
-        if (!isEnabled() || texts.isEmpty()) return Collections.emptyList();
+        if (!isEnabled() || texts == null || texts.isEmpty()) {
+            return List.of();
+        }
+
+        SearchProperties.Embedding cfg = searchProperties.getEmbedding();
+        Duration timeout = Duration.ofMillis(cfg.getTimeoutMillis());
+
         try {
-            Map<String, Object> body = new HashMap<>();
-            body.put("model", props.getEmbedding().getModel());
-            body.put("input", texts);
+            String requestBody = objectMapper.writeValueAsString(
+                    Map.of("model", cfg.getModel(), "input", texts));
 
-            Map<?, ?> response = client.post()
-                    .uri("https://api.mistral.ai/v1/embeddings")
-                    .header("Authorization", "Bearer " + props.getEmbedding().getApiKey())
-                    .bodyValue(body)
+            JsonNode response = webClient.post()
+                    .uri(MISTRAL_EMBED_URL)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + cfg.getApiKey())
+                    .header(HttpHeaders.CONTENT_TYPE, "application/json")
+                    .bodyValue(requestBody)
                     .retrieve()
-                    .bodyToMono(Map.class)
-                    .timeout(Duration.ofMillis(props.getEmbedding().getTimeoutMillis()))
-                    .block();
+                    .bodyToMono(JsonNode.class)
+                    .block(timeout);
 
-            if (response == null) return Collections.emptyList();
+            if (response == null || !response.path("data").isArray()) {
+                log.warn("Mistral embedding API returned unexpected response");
+                return nullList(texts.size());
+            }
 
-            List<?> data = (List<?>) response.get("data");
-            List<float[]> result = new ArrayList<>(data.size());
-            for (Object item : data) {
-                List<?> vec = (List<?>) ((Map<?, ?>) item).get("embedding");
-                float[] floats = new float[vec.size()];
-                for (int i = 0; i < vec.size(); i++) floats[i] = ((Number) vec.get(i)).floatValue();
-                result.add(floats);
+            float[][] ordered = new float[texts.size()][];
+            for (JsonNode item : response.path("data")) {
+                int index = item.path("index").asInt(-1);
+                if (index >= 0 && index < texts.size() && item.path("embedding").isArray()) {
+                    JsonNode embNode = item.path("embedding");
+                    float[] vec = new float[embNode.size()];
+                    for (int i = 0; i < embNode.size(); i++) {
+                        vec[i] = (float) embNode.get(i).asDouble();
+                    }
+                    ordered[index] = vec;
+                }
+            }
+
+            List<float[]> result = new ArrayList<>(texts.size());
+            for (float[] v : ordered) {
+                result.add(v);
             }
             return result;
+
         } catch (Exception e) {
-            log.error("Mistral embedding failed: {}", e.getMessage());
-            return Collections.emptyList();
+            log.warn("Mistral embedding request failed: {}", e.getMessage());
+            return nullList(texts.size());
         }
+    }
+
+    private List<float[]> nullList(int size) {
+        List<float[]> list = new ArrayList<>(size);
+        for (int i = 0; i < size; i++) {
+            list.add(null);
+        }
+        return list;
     }
 }

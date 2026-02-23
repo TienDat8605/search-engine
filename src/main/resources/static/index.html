@@ -59,14 +59,12 @@
         </div>
     </section>
 
-    <!-- AI Overview panel: shown asynchronously after search results load -->
-    <section id="ai-overview" class="ai-overview" hidden aria-label="AI Overview">
+    <section id="ai-overview" class="ai-overview" hidden aria-label="AI Overview" aria-live="polite">
         <div class="ai-overview-header">
-            <span class="ai-label">AI Overview</span>
-            <span class="ai-disclaimer">Based on Stack Overflow results</span>
+            <span class="ai-badge">AI Overview</span>
         </div>
-        <div id="ai-content" class="ai-content"></div>
-        <div id="ai-citations" class="ai-citations"></div>
+        <div id="ai-overview-content" class="ai-overview-content"></div>
+        <ol id="ai-citations" class="ai-citations" hidden></ol>
     </section>
 
     <section id="results" class="results" aria-label="Search results"></section>

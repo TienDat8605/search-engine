@@ -13,7 +13,7 @@ const prevButton = document.getElementById("prevButton");
 const nextButton = document.getElementById("nextButton");
 const pageLabel = document.getElementById("pageLabel");
 const aiOverview = document.getElementById("ai-overview");
-const aiContent = document.getElementById("ai-content");
+const aiOverviewContent = document.getElementById("ai-overview-content");
 const aiCitations = document.getElementById("ai-citations");
 const docPanel = document.getElementById("docPanel");
 const docTitle = document.getElementById("docTitle");
@@ -26,7 +26,6 @@ const docCloseButton = document.getElementById("docCloseButton");
 let currentOffset = 0;
 
 initializeFromUrl();
-// Auto-run search if the page was loaded/reloaded with a query in the URL
 if (queryInput.value.trim()) {
     runSearch();
 }
@@ -84,9 +83,13 @@ async function runSearch() {
     renderSkeletons();
     updatePager(0);
     updateUrl(params);
+    showAiSkeleton();
+
+    const searchFetch = fetch(`/api/search?${params.toString()}`);
+    const aiFetch = fetchAiOverview(query);
 
     try {
-        const response = await fetch(`/api/search?${params.toString()}`);
+        const response = await searchFetch;
         const payload = await response.json();
 
         if (!response.ok) {
@@ -94,7 +97,6 @@ async function runSearch() {
         }
 
         renderResults(payload);
-        fetchAiOverview(payload.query);
     } catch (error) {
         toolbar.hidden = true;
         resultsArea.innerHTML = "";
@@ -102,6 +104,8 @@ async function runSearch() {
     } finally {
         setLoading(false);
     }
+
+    await aiFetch;
 }
 
 function renderResults(payload) {
@@ -183,6 +187,62 @@ function renderResults(payload) {
     }
 }
 
+async function fetchAiOverview(query) {
+    try {
+        const response = await fetch(`/api/ask?q=${encodeURIComponent(query)}`);
+        if (!response.ok) {
+            hideAiOverview();
+            return;
+        }
+        const payload = await response.json();
+        renderAiOverview(payload);
+    } catch {
+        hideAiOverview();
+    }
+}
+
+function showAiSkeleton() {
+    aiOverview.hidden = false;
+    aiOverviewContent.innerHTML = '<div class="skeleton ai-skeleton"></div>';
+    aiCitations.hidden = true;
+    aiCitations.innerHTML = "";
+}
+
+function hideAiOverview() {
+    aiOverview.hidden = true;
+    aiOverviewContent.innerHTML = "";
+    aiCitations.hidden = true;
+    aiCitations.innerHTML = "";
+}
+
+function renderAiOverview(payload) {
+    if (!payload || !payload.overview) {
+        hideAiOverview();
+        return;
+    }
+
+    aiOverview.hidden = false;
+    aiOverviewContent.textContent = payload.overview;
+
+    const citations = payload.citations || [];
+    if (citations.length > 0) {
+        aiCitations.hidden = false;
+        aiCitations.innerHTML = "";
+        for (const c of citations) {
+            const li = document.createElement("li");
+            const link = document.createElement("a");
+            link.href = c.url || "#";
+            link.textContent = c.title || `Source ${c.index}`;
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+            li.appendChild(link);
+            aiCitations.appendChild(li);
+        }
+    } else {
+        aiCitations.hidden = true;
+    }
+}
+
 async function loadDocumentDetail(questionId) {
     if (!questionId) {
         return;
@@ -197,7 +257,6 @@ async function loadDocumentDetail(questionId) {
     docSourceLink.href = "#";
     removeRelatedQuestions();
 
-    // Fire both requests in parallel to minimise latency.
     const docFetch = fetch(`/api/doc/${encodeURIComponent(questionId)}`);
     const similarFetch = fetch(`/api/similar/${encodeURIComponent(questionId)}`).catch(() => null);
 
@@ -293,6 +352,8 @@ function sendClickBeacon(query, url, position) {
         new Blob([JSON.stringify({ query, url, position })], { type: "application/json" })
     );
 }
+
+function renderSkeletons() {
     const count = 3;
     resultsArea.innerHTML = "";
     for (let index = 0; index < count; index += 1) {
@@ -367,57 +428,3 @@ function extractErrorMessage(payload, status) {
 toolbar.hidden = true;
 resultsArea.innerHTML = "";
 setStatus("Type a query and press Search.");
-
-/** Asynchronously fetches AI overview and renders it above the results. Fails silently. */
-async function fetchAiOverview(query) {
-    aiOverview.hidden = true;
-    aiContent.innerHTML = "";
-    aiCitations.innerHTML = "";
-
-    // Show skeleton while in-flight
-    aiOverview.hidden = false;
-    aiContent.innerHTML = '<div class="ai-skeleton"><div class="ai-skeleton-line"></div><div class="ai-skeleton-line short"></div></div>';
-
-    try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
-
-        const response = await fetch(`/api/ask?q=${encodeURIComponent(query)}`, {
-            signal: controller.signal,
-        });
-        clearTimeout(timeoutId);
-
-        if (!response.ok) {
-            aiOverview.hidden = true;
-            return;
-        }
-
-        const data = await response.json();
-        if (!data || !data.answer || data.answer.trim() === "") {
-            aiOverview.hidden = true;
-            return;
-        }
-
-        // Render answer (already HTML-safe with inline citation anchors from backend)
-        aiContent.innerHTML = `<p>${data.answer}</p>`;
-
-        // Render citation footnotes
-        if (data.citations && data.citations.length > 0) {
-            const ol = document.createElement("ol");
-            ol.className = "ai-citation-list";
-            for (const cite of data.citations) {
-                const li = document.createElement("li");
-                const a = document.createElement("a");
-                a.href = `#q-${cite.questionId}`;
-                a.textContent = cite.title || cite.url;
-                a.className = "ai-citation-link";
-                li.appendChild(a);
-                ol.appendChild(li);
-            }
-            aiCitations.appendChild(ol);
-        }
-    } catch (_) {
-        // Timeout or network error — hide silently
-        aiOverview.hidden = true;
-    }
-}

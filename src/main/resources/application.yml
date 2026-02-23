@@ -7,6 +7,7 @@ spring:
     password: ${DB_PASSWORD:postgres}
   sql:
     init:
+      # All statements in schema.sql use IF NOT EXISTS, making this idempotent on every restart.
       mode: always
   jpa:
     hibernate:
@@ -29,19 +30,19 @@ server:
 search:
   embedding:
     enabled: ${EMBEDDING_ENABLED:false}
-    provider: mistral
+    provider: ${EMBEDDING_PROVIDER:mistral}
     api-key: ${MISTRAL_API_KEY:}
-    model: mistral-embed
+    model: ${EMBEDDING_MODEL:mistral-embed}
     dimensions: 1024
     timeout-millis: 5000
     batch-size: 10
   llm:
-    enabled: ${LLM_ENABLED:false}
-    base-url: https://api.mistral.ai/v1
+    enabled: ${LLM_ENABLED:true}
     api-key: ${MISTRAL_API_KEY:}
     model: ${LLM_MODEL:mistral-small-latest}
+    timeout-millis: 15000
     max-tokens: 512
-    timeout-seconds: 10
+    cache-ttl-minutes: 60
   jina:
     search-api-key: ${JINA_API_KEY:}
     search-url: https://s.jina.ai

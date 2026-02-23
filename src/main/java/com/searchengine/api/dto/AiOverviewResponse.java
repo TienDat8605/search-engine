@@ -3,16 +3,9 @@ package com.searchengine.api.dto;
 import java.util.List;
 
 public record AiOverviewResponse(
-        String answer,
-        List<Citation> citations
+        String overview,
+        List<Citation> citations,
+        boolean cached
 ) {
-    public record Citation(
-            Long questionId,
-            String title,
-            String url
-    ) {}
-
-    public static AiOverviewResponse empty() {
-        return new AiOverviewResponse("", List.of());
-    }
+    public record Citation(int index, String title, String url) {}
 }
