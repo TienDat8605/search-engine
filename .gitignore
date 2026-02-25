@@ -32,14 +32,13 @@ Thumbs.db
 *.swp
 *.swo
 
-# Local-only helper scripts (do not commit)
-/scripts/start-dev.sh
-/scripts/stop-dev.sh
-/scripts/dev-status.sh
-
+# Local-only directories and scripts
+/scripts/
+/deploy/vm/
 .agents/
 
 # Project docs (local only)
 docs/
 
-# .github/ is intentionally tracked for Copilot instructions, agents, and prompts
+# GitHub workflows and configuration
+.github/
