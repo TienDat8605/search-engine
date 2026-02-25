@@ -25,7 +25,8 @@ public class HealthController {
                 "status", "UP",
                 "timestamp", Instant.now().toString(),
                 "stackexchangeBackoffActive", backoffManager.isBackoffActive(),
-                "stackexchangeBackoffRemainingSeconds", backoffManager.remainingBackoff().toSeconds()
+                "stackexchangeBackoffRemainingSeconds", backoffManager.remainingBackoff().toSeconds(),
+                "stackexchangeQuotaRemaining", backoffManager.getQuotaRemaining()
         );
     }
 }

@@ -24,6 +24,11 @@ public class StackExchangeBackoffManager {
         return quotaRemaining.get() == 0;
     }
 
+    public int getQuotaRemaining() {
+        int value = quotaRemaining.get();
+        return value == Integer.MAX_VALUE ? -1 : value;
+    }
+
     public Duration remainingBackoff() {
         long remaining = blockedUntilMillis.get() - System.currentTimeMillis();
         if (remaining <= 0) {

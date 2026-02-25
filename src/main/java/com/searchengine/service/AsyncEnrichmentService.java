@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
@@ -13,6 +14,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -101,7 +103,16 @@ public class AsyncEnrichmentService {
                 return;
             }
 
-            DocumentEntity entity = documentRepository.findById(result.url()).orElseGet(DocumentEntity::new);
+            Optional<DocumentEntity> byUrl = documentRepository.findById(result.url());
+            DocumentEntity entity;
+            if (byUrl.isPresent()) {
+                entity = byUrl.get();
+            } else if (result.questionId() != null && documentRepository.findByQuestionId(result.questionId()).isPresent()) {
+                // Same question already stored under a different URL; skip to avoid duplicate question_id.
+                return;
+            } else {
+                entity = new DocumentEntity();
+            }
             entity.setQuestionId(result.questionId());
             entity.setUrl(result.url());
             entity.setSource(result.source().name());
@@ -112,7 +123,12 @@ public class AsyncEnrichmentService {
             entity.setMetadataJson(mergeMetadata(result.metadataJson(), "{\"enriched\":true,\"enriched_at\":\"" + Instant.now() + "\"}"));
             entity.setTags(String.join(",", result.tags()));
             entity.setFetchedAt(Instant.now());
-            documentRepository.save(entity);
+            try {
+                documentRepository.save(entity);
+            } catch (DataIntegrityViolationException ignored) {
+                // Race condition: another concurrent thread already persisted this question_id.
+                return;
+            }
             embeddingService.generateAndStore(entity);
             embeddingService.generateAndStoreTitleAndAnswer(entity);
         } finally {

@@ -1,185 +1,331 @@
-const searchForm = document.getElementById("searchForm");
-const queryInput = document.getElementById("queryInput");
-const sortSelect = document.getElementById("sortSelect");
-const tagsInput = document.getElementById("tagsInput");
-const limitInput = document.getElementById("limitInput");
-const statusArea = document.getElementById("statusArea");
-const resultsArea = document.getElementById("results");
-const searchButton = document.getElementById("searchButton");
+// ── Constants ─────────────────────────────────────────────────────────────────
+const BATCH_SIZE      = 50;          // items fetched from API per request
+const PAGE_SIZE       = 10;          // items displayed per page
+const PAGES_PER_BATCH = BATCH_SIZE / PAGE_SIZE; // 5
+
+// ── DOM refs ──────────────────────────────────────────────────────────────────
+const searchForm         = document.getElementById("searchForm");
+const queryInput         = document.getElementById("queryInput");
+const sortSelect         = document.getElementById("sortSelect");
+const tagsInput          = document.getElementById("tagsInput");
+const statusArea         = document.getElementById("statusArea");
+const resultsArea        = document.getElementById("results");
+const searchButton       = document.getElementById("searchButton");
 const resultCardTemplate = document.getElementById("resultCardTemplate");
-const toolbar = document.getElementById("toolbar");
-const queryMeta = document.getElementById("queryMeta");
-const prevButton = document.getElementById("prevButton");
-const nextButton = document.getElementById("nextButton");
-const pageLabel = document.getElementById("pageLabel");
-const aiOverview = document.getElementById("ai-overview");
-const aiOverviewContent = document.getElementById("ai-overview-content");
-const aiCitations = document.getElementById("ai-citations");
-const docPanel = document.getElementById("docPanel");
-const docTitle = document.getElementById("docTitle");
-const docMeta = document.getElementById("docMeta");
-const docQuestion = document.getElementById("docQuestion");
-const docAnswer = document.getElementById("docAnswer");
-const docSourceLink = document.getElementById("docSourceLink");
-const docCloseButton = document.getElementById("docCloseButton");
+const queryMeta          = document.getElementById("queryMeta");
+const resultsHeader      = document.getElementById("resultsHeader");
+const pager              = document.getElementById("pager");
+const aiOverview         = document.getElementById("ai-overview");
+const aiOverviewContent  = document.getElementById("ai-overview-content");
+const aiCitations        = document.getElementById("ai-citations");
+const docPanel           = document.getElementById("docPanel");
+const docTitle           = document.getElementById("docTitle");
+const docMeta            = document.getElementById("docMeta");
+const docQuestion        = document.getElementById("docQuestion");
+const docAnswer          = document.getElementById("docAnswer");
+const docSourceLink      = document.getElementById("docSourceLink");
+const docCloseButton     = document.getElementById("docCloseButton");
+const themeToggle        = document.getElementById("themeToggle");
 
-let currentOffset = 0;
+// ── Pagination state ──────────────────────────────────────────────────────────
+let currentPage      = 1;   // current display page (1-indexed)
+let batchStartPage   = 1;   // first page number of the loaded batch
+let batchItems       = [];  // up to BATCH_SIZE items in memory
+let hasMoreFromServer = false;
+let activeQuery      = { q: "", sort: "relevance", tags: "" };
 
-initializeFromUrl();
-if (queryInput.value.trim()) {
-    runSearch();
+// ── Dark mode ─────────────────────────────────────────────────────────────────
+function initTheme() {
+    const saved       = localStorage.getItem("theme");
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const theme       = saved || (prefersDark ? "dark" : "light");
+    document.documentElement.setAttribute("data-theme", theme);
 }
 
-searchForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    currentOffset = 0;
-    await runSearch();
+initTheme();
+
+themeToggle.addEventListener("click", () => {
+    const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    localStorage.setItem("theme", next);
 });
 
-prevButton.addEventListener("click", async () => {
-    if (currentOffset <= 0) {
-        return;
-    }
-    currentOffset = Math.max(0, currentOffset - getLimit());
-    await runSearch();
-});
+// ── Startup ───────────────────────────────────────────────────────────────────
+pager.hidden         = true;
+resultsHeader.hidden = true;
+resultsArea.innerHTML = "";
+setStatus("");
 
-nextButton.addEventListener("click", async () => {
-    currentOffset += getLimit();
+initSearchFromUrl();
+
+searchForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
     await runSearch();
 });
 
 window.addEventListener("popstate", () => {
-    initializeFromUrl();
-    if (queryInput.value.trim()) {
-        runSearch();
-    }
+    initSearchFromUrl();
 });
 
 docCloseButton.addEventListener("click", () => {
     docPanel.hidden = true;
 });
 
+// ── Search ────────────────────────────────────────────────────────────────────
 async function runSearch() {
-    const query = queryInput.value.trim();
-    if (!query) {
+    const q = queryInput.value.trim();
+    if (!q) {
         setStatus("Please enter a search query.", true);
         return;
     }
 
-    const params = new URLSearchParams({
-        q: query,
+    activeQuery = {
+        q,
         sort: sortSelect.value,
-        limit: getLimit().toString(),
-        offset: currentOffset.toString()
-    });
+        tags: tagsInput.value.trim(),
+    };
 
-    const tags = tagsInput.value.trim();
-    if (tags) {
-        params.set("tags", tags);
-    }
-
-    setLoading(true);
-    renderSkeletons();
-    updatePager(0);
-    updateUrl(params);
+    currentPage       = 1;
+    batchStartPage    = 1;
+    batchItems        = [];
+    hasMoreFromServer = false;
+    resultsHeader.hidden = true;
+    pager.hidden         = true;
+    hideAiOverview();
     showAiSkeleton();
 
-    const searchFetch = fetch(`/api/search?${params.toString()}`);
-    const aiFetch = fetchAiOverview(query);
-    const searchStartTime = Date.now();
+    const aiPromise = fetchAiOverview(q);
+    await fetchBatch(1);
 
-    try {
-        const response = await searchFetch;
-        const payload = await response.json();
-        const searchElapsed = Date.now() - searchStartTime;
-
-        if (!response.ok) {
-            throw new Error(extractErrorMessage(payload, response.status));
-        }
-
-        renderResults(payload, searchElapsed);
-    } catch (error) {
-        toolbar.hidden = true;
-        resultsArea.innerHTML = "";
-        setStatus(error.message || "Something went wrong.", true);
-    } finally {
-        setLoading(false);
+    if (batchItems.length > 0) {
+        showCurrentPage();
     }
 
-    await aiFetch;
+    await aiPromise;
 }
 
-function renderResults(payload, elapsedMs = 0) {
-    const items = payload.items || [];
-    resultsArea.innerHTML = "";
-    toolbar.hidden = false;
+async function initSearchFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const q      = params.get("q")    || "";
+    const sort   = params.get("sort") || "relevance";
+    const tags   = params.get("tags") || "";
+    const page   = Math.max(1, parseInt(params.get("page") || "1", 10));
 
-    const limit = Number.isInteger(payload.limit) ? payload.limit : getLimit();
-    currentOffset = Number.isInteger(payload.offset) ? Math.max(0, payload.offset) : currentOffset;
-    const page = Math.floor(currentOffset / Math.max(1, limit)) + 1;
-    queryMeta.textContent = `Query: ${payload.query} • Sort: ${payload.sort} • Tags: ${(payload.tags || []).join(", ") || "none"}`;
-    updatePager(page);
+    queryInput.value = q;
+    sortSelect.value = sort === "new" ? "new" : "relevance";
+    tagsInput.value  = tags;
 
-    if (!items.length) {
-        setStatus("No results found. Try changing keywords, sort, or tags.");
-        nextButton.disabled = true;
+    if (!q.trim()) {
+        pager.hidden         = true;
+        resultsHeader.hidden = true;
+        setStatus("");
         return;
     }
 
-    setStatus(`Found ${payload.total} result${payload.total === 1 ? "" : "s"} in ${elapsedMs}ms.`);
-    prevButton.disabled = currentOffset === 0;
-    const providerHasMore = typeof payload.providerHasMore === "boolean" ? payload.providerHasMore : payload.hasMore;
-    nextButton.disabled = !providerHasMore;
+    activeQuery = { q: q.trim(), sort: sortSelect.value, tags: tags.trim() };
 
-    let position = 0;
-    for (const item of items) {
-        position += 1;
-        const fragment = resultCardTemplate.content.cloneNode(true);
-        const card = fragment.querySelector("article");
-        if (card && (Number.isInteger(item.questionId) || Number.isFinite(item.questionId))) {
-            card.id = `q-${item.questionId}`;
-        }
-        const title = fragment.querySelector(".result-title");
-        const acceptedBadge = fragment.querySelector(".badge.accepted");
-        const answeredBadge = fragment.querySelector(".badge.answered");
-        const meta = fragment.querySelector(".meta");
-        const snippet = fragment.querySelector(".snippet");
-        const tags = fragment.querySelector(".tags");
+    const targetBatchStart = getBatchStart(page);
+    await fetchBatch(targetBatchStart);
 
-        title.textContent = item.title;
-        title.href = item.link;
-        title.addEventListener("click", () => sendClickBeacon(payload.query, item.link, position));
+    if (batchItems.length > 0) {
+        currentPage = Math.min(page, batchStartPage + Math.ceil(batchItems.length / PAGE_SIZE) - 1);
+        showCurrentPage();
+    }
 
-        meta.textContent = `Score: ${item.questionScore}`;
+    fetchAiOverview(q);
+}
 
-        snippet.textContent = item.snippet || "No snippet available.";
+// ── Batch fetching ────────────────────────────────────────────────────────────
+async function fetchBatch(newBatchStart) {
+    const batchIndex   = Math.floor((newBatchStart - 1) / PAGES_PER_BATCH);
+    const serverOffset = batchIndex * BATCH_SIZE;
 
-        if (item.accepted) {
-            acceptedBadge.hidden = false;
-        }
-        if (item.answered) {
-            answeredBadge.hidden = false;
-        }
+    const params = new URLSearchParams({
+        q:      activeQuery.q,
+        sort:   activeQuery.sort,
+        limit:  String(BATCH_SIZE),
+        offset: String(serverOffset),
+    });
+    if (activeQuery.tags) params.set("tags", activeQuery.tags);
 
-        for (const tag of item.tags || []) {
-            const chip = document.createElement("span");
-            chip.className = "tag";
-            chip.textContent = tag;
-            tags.appendChild(chip);
-        }
+    setLoading(true);
+    renderSkeletons();
+    pager.hidden         = true;
+    resultsHeader.hidden = true;
 
-        resultsArea.appendChild(fragment);
+    const startTime = Date.now();
+    try {
+        const response = await fetch(`/api/search?${params}`);
+        const payload  = await response.json();
+        const elapsed  = Date.now() - startTime;
+
+        if (!response.ok) throw new Error(extractErrorMessage(payload, response.status));
+
+        batchItems        = payload.items || [];
+        hasMoreFromServer = typeof payload.providerHasMore === "boolean"
+            ? payload.providerHasMore
+            : Boolean(payload.hasMore);
+        batchStartPage    = newBatchStart;
+
+        const total = payload.total ?? batchItems.length;
+        setStatus(
+            batchItems.length
+                ? `About ${total.toLocaleString()} result${total === 1 ? "" : "s"} · ${elapsed}ms`
+                : "No results found. Try different keywords or filters."
+        );
+
+        queryMeta.textContent =
+            `Query: ${payload.query} · Sort: ${payload.sort}` +
+            (activeQuery.tags ? ` · Tags: ${activeQuery.tags}` : "");
+        resultsHeader.hidden = false;
+
+    } catch (err) {
+        batchItems           = [];
+        resultsHeader.hidden = true;
+        pager.hidden         = true;
+        resultsArea.innerHTML = "";
+        setStatus(err.message || "Something went wrong.", true);
+    } finally {
+        setLoading(false);
     }
 }
 
+// ── Page navigation ───────────────────────────────────────────────────────────
+function getBatchStart(pageNum) {
+    const batchIndex = Math.floor((pageNum - 1) / PAGES_PER_BATCH);
+    return batchIndex * PAGES_PER_BATCH + 1;
+}
+
+async function goToPage(pageNum) {
+    const targetBatchStart = getBatchStart(pageNum);
+    if (targetBatchStart !== batchStartPage) {
+        await fetchBatch(targetBatchStart);
+    }
+    currentPage = pageNum;
+    showCurrentPage();
+    resultsArea.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function showCurrentPage() {
+    resultsArea.innerHTML = "";
+
+    const startIdx  = (currentPage - batchStartPage) * PAGE_SIZE;
+    const pageItems = batchItems.slice(startIdx, startIdx + PAGE_SIZE);
+
+    if (pageItems.length === 0) {
+        renderPager();
+        return;
+    }
+
+    let globalPosition = (currentPage - 1) * PAGE_SIZE;
+    for (const item of pageItems) {
+        globalPosition += 1;
+        resultsArea.appendChild(buildCard(item, globalPosition));
+    }
+
+    renderPager();
+    updateUrl();
+}
+
+// ── Pager rendering ───────────────────────────────────────────────────────────
+function renderPager() {
+    pager.innerHTML = "";
+
+    const pagesInBatch  = Math.ceil(batchItems.length / PAGE_SIZE);
+    const lastKnownPage = batchStartPage + pagesInBatch - 1;
+    const hasPages      = pagesInBatch > 0;
+
+    if (!hasPages && !hasMoreFromServer) {
+        pager.hidden = true;
+        return;
+    }
+
+    pager.hidden = false;
+
+    const hasPrev = currentPage > 1;
+    const hasNext = currentPage < lastKnownPage || hasMoreFromServer;
+
+    // ‹ Previous
+    pager.appendChild(
+        makePagerBtn("‹", hasPrev, () => goToPage(currentPage - 1), "Previous page", "pager-arrow")
+    );
+
+    // Page number buttons for all pages in the current batch
+    for (let p = batchStartPage; p <= lastKnownPage; p++) {
+        const page = p; // capture for closure
+        const btn  = makePagerBtn(String(page), true, () => goToPage(page));
+        if (page === currentPage) {
+            btn.classList.add("pager-active");
+            btn.setAttribute("aria-current", "page");
+        }
+        pager.appendChild(btn);
+    }
+
+    // Ellipsis when server has more results beyond this batch
+    if (hasMoreFromServer) {
+        const ellipsis   = document.createElement("span");
+        ellipsis.className  = "pager-ellipsis";
+        ellipsis.textContent = "…";
+        pager.appendChild(ellipsis);
+    }
+
+    // › Next
+    pager.appendChild(
+        makePagerBtn("›", hasNext, () => goToPage(currentPage + 1), "Next page", "pager-arrow")
+    );
+}
+
+function makePagerBtn(text, enabled, onClick, ariaLabel, extraClass) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = text;
+    if (ariaLabel)  btn.setAttribute("aria-label", ariaLabel);
+    if (extraClass) btn.classList.add(extraClass);
+    btn.disabled = !enabled;
+    if (enabled) btn.addEventListener("click", onClick);
+    return btn;
+}
+
+// ── Card rendering ────────────────────────────────────────────────────────────
+function buildCard(item, position) {
+    const fragment      = resultCardTemplate.content.cloneNode(true);
+    const card          = fragment.querySelector("article");
+    const title         = fragment.querySelector(".result-title");
+    const acceptedBadge = fragment.querySelector(".badge.accepted");
+    const answeredBadge = fragment.querySelector(".badge.answered");
+    const meta          = fragment.querySelector(".meta");
+    const snippet       = fragment.querySelector(".snippet");
+    const tagsDiv       = fragment.querySelector(".tags");
+
+    if (card && (Number.isInteger(item.questionId) || Number.isFinite(item.questionId))) {
+        card.id = `q-${item.questionId}`;
+    }
+
+    title.textContent = item.title;
+    title.href        = item.link;
+    title.addEventListener("click", () => sendClickBeacon(activeQuery.q, item.link, position));
+
+    meta.textContent    = `Score: ${item.questionScore}`;
+    snippet.textContent = item.snippet || "No snippet available.";
+
+    if (item.accepted) acceptedBadge.hidden = false;
+    if (item.answered) answeredBadge.hidden = false;
+
+    for (const tag of item.tags || []) {
+        const chip      = document.createElement("span");
+        chip.className  = "tag";
+        chip.textContent = tag;
+        tagsDiv.appendChild(chip);
+    }
+
+    return fragment;
+}
+
+// ── AI Overview ───────────────────────────────────────────────────────────────
 async function fetchAiOverview(query) {
     try {
         const response = await fetch(`/api/ask?q=${encodeURIComponent(query)}`);
-        if (!response.ok) {
-            hideAiOverview();
-            return;
-        }
+        if (!response.ok) { hideAiOverview(); return; }
         const payload = await response.json();
         renderAiOverview(payload);
     } catch {
@@ -188,17 +334,17 @@ async function fetchAiOverview(query) {
 }
 
 function showAiSkeleton() {
-    aiOverview.hidden = false;
+    aiOverview.hidden         = false;
     aiOverviewContent.innerHTML = '<div class="skeleton ai-skeleton"></div>';
-    aiCitations.hidden = true;
-    aiCitations.innerHTML = "";
+    aiCitations.hidden        = true;
+    aiCitations.innerHTML     = "";
 }
 
 function hideAiOverview() {
-    aiOverview.hidden = true;
+    aiOverview.hidden         = true;
     aiOverviewContent.innerHTML = "";
-    aiCitations.hidden = true;
-    aiCitations.innerHTML = "";
+    aiCitations.hidden        = true;
+    aiCitations.innerHTML     = "";
 }
 
 function escapeHtml(text) {
@@ -209,100 +355,78 @@ function escapeHtml(text) {
 }
 
 function formatAiMarkdown(raw, citationMap) {
-    // Extract fenced code blocks first and replace with placeholders
     const codeBlocks = [];
+
     const withPlaceholders = raw.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
-        const idx = codeBlocks.length;
+        const idx      = codeBlocks.length;
         const langAttr = lang ? ` data-lang="${escapeHtml(lang)}"` : "";
         codeBlocks.push(
-            `<pre class="ai-code-block"><div class="ai-code-header">${escapeHtml(lang || "code")}</div><code${langAttr}>${escapeHtml(code.replace(/\n$/, ""))}</code></pre>`
+            `<pre class="ai-code-block"><div class="ai-code-header">${escapeHtml(lang || "code")}</div>` +
+            `<code${langAttr}>${escapeHtml(code.replace(/\n$/, ""))}</code></pre>`
         );
         return `\x00CODEBLOCK_${idx}\x00`;
     });
 
-    // Escape HTML in the remaining text
     let html = escapeHtml(withPlaceholders);
-
-    // Inline code: `code`
     html = html.replace(/`([^`]+)`/g, '<code class="ai-inline-code">$1</code>');
-
-    // Bold: **text**
     html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-
-    // Citation markers: [SO-n]
-    html = html.replace(/\[SO-(\d+)\]/g, (match, num) => {
+    html = html.replace(/\[SO-(\d+)\]/g, (_, num) => {
         const c = citationMap[Number.parseInt(num, 10)];
         if (!c) return "";
         const safeTitle = (c.title || "").replace(/"/g, "&quot;");
-        const safeUrl = (c.url || "#").replace(/"/g, "&quot;");
+        const safeUrl   = (c.url   || "#").replace(/"/g, "&quot;");
         return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="ai-ref" data-tooltip="${safeTitle}"><sup>${num}</sup></a>`;
     });
-
-    // Newlines to <br> (but not inside code block placeholders)
     html = html.replace(/\n/g, "<br>");
-
-    // Restore code block placeholders
     html = html.replace(/\x00CODEBLOCK_(\d+)\x00/g, (_, idx) => codeBlocks[Number.parseInt(idx, 10)]);
-
     return html;
 }
 
 function renderAiOverview(payload) {
-    if (!payload || !payload.overview) {
-        hideAiOverview();
-        return;
-    }
+    if (!payload?.overview) { hideAiOverview(); return; }
 
     aiOverview.hidden = false;
-    const citations = payload.citations || [];
     const citationMap = {};
-    for (const c of citations) {
-        citationMap[c.index] = c;
-    }
-
+    for (const c of payload.citations || []) citationMap[c.index] = c;
     aiOverviewContent.innerHTML = formatAiMarkdown(payload.overview, citationMap);
-
-    aiCitations.hidden = true;
+    aiCitations.hidden  = true;
     aiCitations.innerHTML = "";
 }
 
+// ── Document detail ───────────────────────────────────────────────────────────
 async function loadDocumentDetail(questionId) {
-    if (!questionId) {
-        return;
-    }
+    if (!questionId) return;
 
-    docPanel.hidden = false;
-    docTitle.textContent = "Loading document...";
-    docMeta.textContent = "";
-    docQuestion.textContent = "Loading...";
-    docAnswer.textContent = "Loading...";
+    docPanel.hidden        = false;
+    docTitle.textContent   = "Loading document…";
+    docMeta.textContent    = "";
+    docQuestion.textContent = "Loading…";
+    docAnswer.textContent  = "Loading…";
     docSourceLink.textContent = "Open on Stack Overflow";
-    docSourceLink.href = "#";
+    docSourceLink.href     = "#";
     removeRelatedQuestions();
 
-    const docFetch = fetch(`/api/doc/${encodeURIComponent(questionId)}`);
+    const docFetch     = fetch(`/api/doc/${encodeURIComponent(questionId)}`);
     const similarFetch = fetch(`/api/similar/${encodeURIComponent(questionId)}`).catch(() => null);
 
     let docOk = false;
     try {
         const response = await docFetch;
-        const payload = await response.json();
-        if (!response.ok) {
-            throw new Error(extractErrorMessage(payload, response.status));
-        }
+        const payload  = await response.json();
+        if (!response.ok) throw new Error(extractErrorMessage(payload, response.status));
 
-        docTitle.textContent = payload.title || `Question #${questionId}`;
-        docMeta.textContent = `Question ID: ${payload.questionId} • Source: ${payload.source} • Tags: ${(payload.tags || []).join(", ") || "none"}`;
-        docQuestion.textContent = payload.questionText || "Question text not enriched yet.";
-        docAnswer.textContent = payload.bestAnswerText || "Best answer text not enriched yet.";
-        docSourceLink.textContent = "Open on Stack Overflow";
-        docSourceLink.href = payload.url || "#";
+        docTitle.textContent       = payload.title || `Question #${questionId}`;
+        docMeta.textContent        = `Question ID: ${payload.questionId} · Source: ${payload.source} · Tags: ${(payload.tags || []).join(", ") || "none"}`;
+        docQuestion.textContent    = payload.questionText   || "Question text not enriched yet.";
+        docAnswer.textContent      = payload.bestAnswerText || "Best answer text not enriched yet.";
+        docSourceLink.textContent  = "Open on Stack Overflow";
+        docSourceLink.href         = payload.url || "#";
         docOk = true;
-    } catch (error) {
+    } catch (err) {
         docTitle.textContent = "Document detail unavailable";
-        docMeta.textContent = "";
-        docQuestion.textContent = error.message || "Unable to load document detail.";
-        docAnswer.textContent = "";
+        docMeta.textContent  = "";
+        docQuestion.textContent = err.message || "Unable to load document detail.";
+        docAnswer.textContent   = "";
         docSourceLink.textContent = "";
         docSourceLink.removeAttribute("href");
     }
@@ -310,20 +434,18 @@ async function loadDocumentDetail(questionId) {
     if (docOk) {
         try {
             const similarResp = await similarFetch;
-            if (similarResp && similarResp.ok) {
+            if (similarResp?.ok) {
                 const similar = await similarResp.json();
                 if (Array.isArray(similar) && similar.length > 0) {
                     renderRelatedQuestions(similar.slice(0, 5));
                 }
             }
-        } catch {
-            // Degrade gracefully — related questions are optional.
-        }
+        } catch { /* optional — degrade gracefully */ }
     }
 }
 
 function renderRelatedQuestions(items) {
-    const section = document.createElement("section");
+    const section   = document.createElement("section");
     section.className = "related-questions";
 
     const heading = document.createElement("h4");
@@ -334,19 +456,19 @@ function renderRelatedQuestions(items) {
         const card = document.createElement("div");
         card.className = "related-question-card";
 
-        const link = document.createElement("a");
-        link.href = q.link || "#";
+        const link   = document.createElement("a");
+        link.href    = q.link || "#";
         link.textContent = q.title || `Question #${q.questionId}`;
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
+        link.target  = "_blank";
+        link.rel     = "noopener noreferrer";
         card.appendChild(link);
 
-        if (q.tags && q.tags.length > 0) {
-            const tagsDiv = document.createElement("div");
+        if (q.tags?.length) {
+            const tagsDiv   = document.createElement("div");
             tagsDiv.className = "tags";
             for (const tag of q.tags) {
-                const chip = document.createElement("span");
-                chip.className = "tag";
+                const chip      = document.createElement("span");
+                chip.className  = "tag";
                 chip.textContent = tag;
                 tagsDiv.appendChild(chip);
             }
@@ -360,16 +482,12 @@ function renderRelatedQuestions(items) {
 }
 
 function removeRelatedQuestions() {
-    const existing = docPanel.querySelector(".related-questions");
-    if (existing) {
-        existing.remove();
-    }
+    docPanel.querySelector(".related-questions")?.remove();
 }
 
+// ── Utilities ─────────────────────────────────────────────────────────────────
 function sendClickBeacon(query, url, position) {
-    if (!navigator.sendBeacon) {
-        return;
-    }
+    if (!navigator.sendBeacon) return;
     navigator.sendBeacon(
         "/api/events/click",
         new Blob([JSON.stringify({ query, url, position })], { type: "application/json" })
@@ -377,12 +495,11 @@ function sendClickBeacon(query, url, position) {
 }
 
 function renderSkeletons() {
-    const count = 3;
     resultsArea.innerHTML = "";
-    for (let index = 0; index < count; index += 1) {
-        const block = document.createElement("div");
-        block.className = "skeleton";
-        resultsArea.appendChild(block);
+    for (let i = 0; i < 5; i++) {
+        const div       = document.createElement("div");
+        div.className   = "skeleton";
+        resultsArea.appendChild(div);
     }
 }
 
@@ -391,63 +508,25 @@ function setStatus(message, isError = false) {
     statusArea.classList.toggle("error", isError);
 }
 
-function setLoading(value) {
-    searchButton.disabled = value;
-    prevButton.disabled = value;
-    nextButton.disabled = value;
-    searchButton.textContent = value ? "Searching..." : "Search";
+function setLoading(active) {
+    searchButton.disabled     = active;
+    searchButton.textContent  = active ? "Searching…" : "Search";
 }
 
-function clampLimit(value) {
-    const parsed = Number.parseInt(value, 10);
-    if (Number.isNaN(parsed)) {
-        return 50;
-    }
-    return Math.min(100, Math.max(1, parsed));
-}
-
-function getLimit() {
-    const value = clampLimit(limitInput.value);
-    limitInput.value = String(value);
-    return value;
-}
-
-function initializeFromUrl() {
-    const params = new URLSearchParams(window.location.search);
-    const query = params.get("q") || "";
-    const sort = params.get("sort") || "relevance";
-    const tags = params.get("tags") || "";
-    const limit = clampLimit(params.get("limit") || "50");
-    const offset = Number.parseInt(params.get("offset") || "0", 10);
-
-    queryInput.value = query;
-    sortSelect.value = sort === "new" ? "new" : "relevance";
-    tagsInput.value = tags;
-    limitInput.value = String(limit);
-    currentOffset = Number.isNaN(offset) ? 0 : Math.max(0, offset);
-}
-
-function updateUrl(params) {
-    const url = `${window.location.pathname}?${params.toString()}`;
-    window.history.replaceState({}, "", url);
-}
-
-function updatePager(pageNumber) {
-    pageLabel.textContent = `Page ${Math.max(1, pageNumber)}`;
+function updateUrl() {
+    const params = new URLSearchParams({
+        q:    activeQuery.q,
+        sort: activeQuery.sort,
+        page: String(currentPage),
+    });
+    if (activeQuery.tags) params.set("tags", activeQuery.tags);
+    window.history.replaceState({}, "", `${window.location.pathname}?${params}`);
 }
 
 function extractErrorMessage(payload, status) {
     if (payload && typeof payload === "object") {
-        if (payload.message) {
-            return payload.message;
-        }
-        if (payload.error) {
-            return `${payload.error} (${status})`;
-        }
+        if (payload.message) return payload.message;
+        if (payload.error)   return `${payload.error} (${status})`;
     }
     return `Search request failed (${status}).`;
 }
-
-toolbar.hidden = true;
-resultsArea.innerHTML = "";
-setStatus("");
