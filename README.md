@@ -16,7 +16,7 @@ A modern search engine for Stack Overflow questions powered by AI. Get instant a
 - **Cache**: Redis
 - **Database**: PostgreSQL
 - **LLM**: Mistral AI
-- **APIs**: Stack Exchange API, Jina for embeddings
+- **APIs**: Stack Exchange API
 - **Frontend**: Vanilla JavaScript, modern CSS
 
 ## Quick Start
