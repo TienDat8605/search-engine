@@ -1,121 +1,74 @@
-# Coding Meta Search Engine
+# Stack Overflow Search Engine
 
-Spring Boot backend that aggregates coding-related search results from Stack Overflow, ranks them, caches responses in Redis, and stores normalized documents in Postgres.
+A modern search engine for Stack Overflow questions powered by AI. Get instant answers with AI-generated overviews of the most relevant coding solutions.
 
-## Requirements
+## Features
+
+- **Fast Search**: Semantic search across millions of Stack Overflow questions
+- **AI Overview**: AI-powered summaries of the best answers using Mistral AI
+- **Smart Ranking**: Results ranked by relevance, freshness, and community votes
+- **Smart Caching**: Redis-based caching for instant repeat searches
+- **Advanced Filtering**: Filter by tags, sort by relevance or date
+
+## Tech Stack
+
+- **Backend**: Spring Boot 3.x (Java 17+)
+- **Cache**: Redis
+- **Database**: PostgreSQL
+- **LLM**: Mistral AI
+- **APIs**: Stack Exchange API, Jina for embeddings
+- **Frontend**: Vanilla JavaScript, modern CSS
+
+## Quick Start
+
+### Requirements
 
 - Java 17+
-- Maven 3.9+
-- Docker and Docker Compose
+- Docker & Docker Compose
 
-## Run locally
+### Setup
 
-Create `.env` in the project root with your StackExchange key:
+1. Clone the repository and navigate to the project directory
+2. Create a `.env` file with your Stack Exchange API key:
 
 ```bash
 STACKEXCHANGE_API_KEY=your_key_here
 ```
 
-1. Start infrastructure:
+3. Start the application with Docker:
 
 ```bash
 docker compose up -d
 ```
 
-Quick start (one command):
+4. Open your browser and visit `http://localhost:8080`
 
-```bash
-bash scripts/start-dev.sh
-```
+## Development
 
-Stop local services:
-
-```bash
-bash scripts/stop-dev.sh
-```
-
-Check local status:
-
-```bash
-bash scripts/dev-status.sh
-```
-
-2. Run application:
+### Run with Maven
 
 ```bash
 ./mvnw spring-boot:run
 ```
 
-or
+### Test
 
 ```bash
-mvn spring-boot:run
+mvn test
 ```
 
-3. Query API:
+## API Endpoints
+
+- `GET /api/search` - Search Stack Overflow questions
+- `GET /api/health` - Health check
+- `GET /api/analytics` - Search analytics
+
+Example:
 
 ```bash
-curl "http://localhost:8080/api/search?q=spring%20boot%20dependency%20injection%20error&limit=10&sort=relevance&tags=spring-boot,dependency-injection"
+curl "http://localhost:8080/api/search?q=spring%20boot%20error"
 ```
 
-Health endpoint:
+## License
 
-```bash
-curl "http://localhost:8080/api/health"
-```
-
-Analytics endpoint:
-
-```bash
-curl "http://localhost:8080/api/analytics"
-```
-
-## Notes
-
-- Search results are cached with a short TTL.
-- Documents are normalized and persisted in table `documents`.
-- External provider failures degrade gracefully and do not fail the whole request.
-- StackExchange API `backoff` is respected to avoid quota/rate-limit pressure.
-
-## Integration tests
-
-Run integration tests:
-
-```bash
-mvn -q test
-```
-
-Current integration coverage validates:
-
-- `GET /api/search` response contract
-- `GET /api/analytics` summary contract
-
-## VM deployment (single node)
-
-Deployment files are in [deploy/vm/docker-compose.vm.yml](deploy/vm/docker-compose.vm.yml).
-
-Operational docs:
-
-- Pre-deploy checklist: [deploy/vm/DEPLOY_CHECKLIST.md](deploy/vm/DEPLOY_CHECKLIST.md)
-- Go-live runbook: [deploy/vm/RUNBOOK.md](deploy/vm/RUNBOOK.md)
-
-1. Copy env template and set values:
-
-```bash
-cd deploy/vm
-cp .env.example .env
-```
-
-2. Ensure DNS `A` record for `tiendat.tech` points to your VM public IP.
-
-3. Start stack:
-
-```bash
-docker compose -f docker-compose.vm.yml --env-file .env up -d --build
-```
-
-4. Verify health:
-
-```bash
-curl "https://tiendat.tech/api/health"
-```
+Built by Dat
