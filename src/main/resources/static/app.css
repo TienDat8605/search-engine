@@ -1,6 +1,5 @@
 /* ── Design tokens ────────────────────────────────────────────────────────── */
 :root {
-    /* --topbar-h: 52px; */
     color-scheme: light;
 
     --bg:           #f6f8fa;
@@ -49,7 +48,6 @@ body {
     min-height: 100vh;
     display: flex;
     flex-direction: column;
-    padding-top: var(--topbar-h);
 }
 
 main.page {
@@ -60,89 +58,46 @@ main.page {
     padding: 24px 16px 48px;
 }
 
-/* ── Topbar ───────────────────────────────────────────────────────────────── */
-/* .topbar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: var(--topbar-h);
-    z-index: 100;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 20px;
-    background: rgba(255, 255, 255, 0.85);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-bottom: 1px solid var(--line);
-    gap: 12px;
-} */
-
-[data-theme="dark"] .topbar {
-    background: rgba(13, 17, 23, 0.88);
-}
-
-.topbar-brand {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-weight: 700;
-    font-size: 1rem;
-    color: var(--text);
-    text-decoration: none;
-    letter-spacing: -0.01em;
-    white-space: nowrap;
-}
-
-.topbar-brand svg {
-    color: var(--brand);
-    flex-shrink: 0;
-}
-
-.topbar-brand:hover {
-    color: var(--brand);
-}
-
-.topbar-nav {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
-
-.topbar-icon-link {
-    width: 36px;
-    height: 36px;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--muted);
-    text-decoration: none;
-    transition: background 0.15s, color 0.15s;
-    /* Reset button styles */
-    border: 1px solid transparent;
-    background: transparent;
-    cursor: pointer;
-    padding: 0;
-    font: inherit;
-}
-
-.topbar-icon-link:hover {
-    background: var(--brand-soft);
-    color: var(--brand);
-}
-
-/* Sun shows in light mode, moon in dark mode */
+/* Sun shows in light mode, moon shows in dark mode */
 .icon-moon { display: none; }
 [data-theme="dark"] .icon-sun  { display: none; }
 [data-theme="dark"] .icon-moon { display: block; }
 
 /* ── Hero banner ──────────────────────────────────────────────────────────── */
 .hero-banner {
+    position: relative;
     background: linear-gradient(135deg, var(--hero-from), var(--hero-to));
     padding: 40px 20px;
     text-align: center;
+}
+
+/* Dark mode toggle — floats top-right of the hero */
+.theme-toggle {
+    position: absolute;
+    top: 12px;
+    right: 16px;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.theme-toggle:hover {
+    background: rgba(255, 255, 255, 0.22);
+    border-color: rgba(255, 255, 255, 0.45);
+}
+
+.theme-toggle:focus-visible {
+    outline: 3px solid rgba(255, 255, 255, 0.7);
+    outline-offset: 2px;
 }
 
 .hero-inner {
