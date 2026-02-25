@@ -88,8 +88,7 @@ public class SearchService {
     }
 
     private SearchResponse executeAndCache(String query, int limit, int offset, String sort, List<String> tags, String cacheKey) {
-        int fetchSize = computeProviderFetchSize(limit);
-        ProviderSearchPage providerPage = runProviderSearch(query, fetchSize, offset, sort, tags);
+        ProviderSearchPage providerPage = runProviderSearch(query, limit, offset, sort, tags);
         List<ProviderSearchResult> deduped = deduplicate(providerPage.items());
 
         List<String> candidateUrls = deduped.stream().map(ProviderSearchResult::url).toList();
