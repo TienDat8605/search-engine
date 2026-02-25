@@ -24,11 +24,13 @@ public class Ranker {
 
         for (int i = 0; i < n; i++) {
             ProviderSearchResult result = results.get(i);
-            // Base score preserves SO's ordering: position 0 is best, so score descends.
-            // Click boost (0–0.5) can nudge a result up by at most a few positions.
+
             double positionScore = (double) (n - i) / n;
+            double voteScore = Math.min(1.0, Math.log1p(Math.max(0, result.questionScore())) / Math.log1p(100));
+            double answerScore = (result.acceptedAnswerId() != null) ? 1.0 : result.answered() ? 0.6 : 0.2;
             double clickBoost = clickBoosts.getOrDefault(result.url(), 0.0);
-            double score = positionScore + clickBoost;
+
+            double score = 0.70 * positionScore + 0.10 * voteScore + 0.10 * answerScore + 0.10 * clickBoost;
 
             items.add(new SearchItem(
                     result.questionId(),

@@ -30,7 +30,7 @@ public class SearchController {
     @GetMapping("/search")
     public SearchResponse search(
             @RequestParam("q") @NotBlank String query,
-            @RequestParam(name = "limit", defaultValue = "10") @Min(1) @Max(50) int limit,
+            @RequestParam(name = "limit", defaultValue = "50") @Min(1) @Max(100) int limit,
             @RequestParam(name = "offset", defaultValue = "0") @Min(0) int offset,
             @RequestParam(name = "sort", defaultValue = "relevance") String sort,
             @RequestParam(name = "tags", required = false) String tags

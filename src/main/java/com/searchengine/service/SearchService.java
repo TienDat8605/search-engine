@@ -2,10 +2,12 @@ package com.searchengine.service;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
@@ -31,7 +33,7 @@ import com.searchengine.persistence.QueryLogRepository;
 public class SearchService {
 
     private static final Logger log = LoggerFactory.getLogger(SearchService.class);
-    private static final int MAX_PROVIDER_FETCH_SIZE = 50;
+    private static final int MAX_PROVIDER_FETCH_SIZE = 110;
 
     private final StackOverflowSearchClient soClient;
     private final JinaSearchClient jinaClient;
@@ -112,12 +114,15 @@ public class SearchService {
                 providerPage.hasMore(), providerPage.hasMore(),
                 Instant.now(), rankedItems.size(), rankedItems, semanticMode);
 
-        // Side-effects must never prevent the search response from being returned
-        try {
-            persistDocuments(deduped);
-        } catch (Exception e) {
-            log.error("Failed to persist documents for query '{}': {}", query, e.getMessage(), e);
-        }
+        // Persist async — never block the response on DB writes
+        final List<ProviderSearchResult> dedupedForPersist = deduped;
+        CompletableFuture.runAsync(() -> {
+            try {
+                persistDocuments(dedupedForPersist);
+            } catch (Exception e) {
+                log.error("persistDocuments async failed for query '{}': {}", query, e.getMessage(), e);
+            }
+        }, searchExecutor);
         try {
             cacheService.put(cacheKey, response);
         } catch (Exception e) {
@@ -185,8 +190,18 @@ public class SearchService {
 
     @Transactional
     public void persistDocuments(List<ProviderSearchResult> results) {
+        // Deduplicate by questionId within this batch: same SO question can arrive with
+        // different URL variants (slug vs. no-slug), passing URL-level dedup upstream but
+        // still sharing the same questionId. Inserting both would violate the unique
+        // constraint on question_id.
+        Set<Long> batchQuestionIds = new HashSet<>();
         List<DocumentEntity> entities = new ArrayList<>();
+
         for (ProviderSearchResult result : results) {
+            if (result.questionId() != null && !batchQuestionIds.add(result.questionId())) {
+                continue;
+            }
+
             DocumentEntity entity = null;
             if (result.questionId() != null) {
                 entity = documentRepository.findByQuestionId(result.questionId()).orElse(null);
@@ -206,6 +221,7 @@ public class SearchService {
             entity.setFetchedAt(Instant.now());
             entities.add(entity);
         }
+
         documentRepository.saveAll(entities);
     }
 

@@ -87,16 +87,18 @@ async function runSearch() {
 
     const searchFetch = fetch(`/api/search?${params.toString()}`);
     const aiFetch = fetchAiOverview(query);
+    const searchStartTime = Date.now();
 
     try {
         const response = await searchFetch;
         const payload = await response.json();
+        const searchElapsed = Date.now() - searchStartTime;
 
         if (!response.ok) {
             throw new Error(extractErrorMessage(payload, response.status));
         }
 
-        renderResults(payload);
+        renderResults(payload, searchElapsed);
     } catch (error) {
         toolbar.hidden = true;
         resultsArea.innerHTML = "";
@@ -108,7 +110,7 @@ async function runSearch() {
     await aiFetch;
 }
 
-function renderResults(payload) {
+function renderResults(payload, elapsedMs = 0) {
     const items = payload.items || [];
     resultsArea.innerHTML = "";
     toolbar.hidden = false;
@@ -125,7 +127,7 @@ function renderResults(payload) {
         return;
     }
 
-    setStatus(`Found ${payload.total} result${payload.total === 1 ? "" : "s"}.`);
+    setStatus(`Found ${payload.total} result${payload.total === 1 ? "" : "s"} in ${elapsedMs}ms.`);
     prevButton.disabled = currentOffset === 0;
     const providerHasMore = typeof payload.providerHasMore === "boolean" ? payload.providerHasMore : payload.hasMore;
     nextButton.disabled = !providerHasMore;
@@ -141,18 +143,15 @@ function renderResults(payload) {
         const title = fragment.querySelector(".result-title");
         const acceptedBadge = fragment.querySelector(".badge.accepted");
         const answeredBadge = fragment.querySelector(".badge.answered");
-        const semanticBadge = fragment.querySelector(".badge.semantic");
         const meta = fragment.querySelector(".meta");
         const snippet = fragment.querySelector(".snippet");
         const tags = fragment.querySelector(".tags");
-        const detailButton = fragment.querySelector(".detail-button");
 
         title.textContent = item.title;
         title.href = item.link;
         title.addEventListener("click", () => sendClickBeacon(payload.query, item.link, position));
 
-        const tagText = (item.tags || []).slice(0, 8).map((tag) => `#${tag}`).join(" ");
-        meta.textContent = `Score: ${item.questionScore} • Rank: ${item.score.toFixed(2)} • Source: ${item.source}${tagText ? ` • ${tagText}` : ""}`;
+        meta.textContent = `Score: ${item.questionScore}`;
 
         snippet.textContent = item.snippet || "No snippet available.";
 
@@ -162,25 +161,12 @@ function renderResults(payload) {
         if (item.answered) {
             answeredBadge.hidden = false;
         }
-        if (payload.semanticMode === true) {
-            semanticBadge.hidden = false;
-        }
 
         for (const tag of item.tags || []) {
             const chip = document.createElement("span");
             chip.className = "tag";
             chip.textContent = tag;
             tags.appendChild(chip);
-        }
-
-        if (Number.isInteger(item.questionId) || Number.isFinite(item.questionId)) {
-            detailButton.addEventListener("click", () => {
-                sendClickBeacon(payload.query, item.link, 0);
-                loadDocumentDetail(item.questionId);
-            });
-        } else {
-            detailButton.disabled = true;
-            detailButton.textContent = "Detail unavailable";
         }
 
         resultsArea.appendChild(fragment);
@@ -415,9 +401,9 @@ function setLoading(value) {
 function clampLimit(value) {
     const parsed = Number.parseInt(value, 10);
     if (Number.isNaN(parsed)) {
-        return 10;
+        return 50;
     }
-    return Math.min(50, Math.max(1, parsed));
+    return Math.min(100, Math.max(1, parsed));
 }
 
 function getLimit() {
@@ -431,7 +417,7 @@ function initializeFromUrl() {
     const query = params.get("q") || "";
     const sort = params.get("sort") || "relevance";
     const tags = params.get("tags") || "";
-    const limit = clampLimit(params.get("limit") || "10");
+    const limit = clampLimit(params.get("limit") || "50");
     const offset = Number.parseInt(params.get("offset") || "0", 10);
 
     queryInput.value = query;
@@ -464,4 +450,4 @@ function extractErrorMessage(payload, status) {
 
 toolbar.hidden = true;
 resultsArea.innerHTML = "";
-setStatus("Type a query and press Search.");
+setStatus("");

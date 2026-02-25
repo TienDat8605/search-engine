@@ -1,5 +1,6 @@
 package com.searchengine.integration;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -149,7 +150,7 @@ public class StackOverflowSearchClient implements ExternalSearchClient {
                 .uri(builder.build().encode().toUri())
                 .retrieve()
                 .bodyToMono(JsonNode.class)
-                .block();
+                .block(Duration.ofSeconds(5));
     }
 
     private boolean isInvalidKeyResponse(JsonNode response) {

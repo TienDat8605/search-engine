@@ -39,3 +39,10 @@ CREATE TABLE IF NOT EXISTS click_events (
     position INT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_click_events_query_url ON click_events(query_text, url, created_at DESC);
+
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS title_embedding vector(1024);
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS answer_embedding vector(1024);
+CREATE INDEX IF NOT EXISTS documents_title_embedding_idx ON documents USING ivfflat (title_embedding vector_cosine_ops) WITH (lists = 10);
+CREATE INDEX IF NOT EXISTS documents_answer_embedding_idx ON documents USING ivfflat (answer_embedding vector_cosine_ops) WITH (lists = 10);

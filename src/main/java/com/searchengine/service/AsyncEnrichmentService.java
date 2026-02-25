@@ -114,6 +114,7 @@ public class AsyncEnrichmentService {
             entity.setFetchedAt(Instant.now());
             documentRepository.save(entity);
             embeddingService.generateAndStore(entity);
+            embeddingService.generateAndStoreTitleAndAnswer(entity);
         } finally {
             hostSemaphore.release();
             globalSemaphore.release();

@@ -3,6 +3,7 @@ package com.searchengine.service;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.slf4j.Logger;
@@ -71,22 +72,30 @@ public class VectorSearchService {
                 return candidates;
             }
 
+            // Batch fetch title similarity (1st priority) + answer similarity (2nd priority)
+            String queryEmbeddingStr = EmbeddingService.formatEmbedding(queryVec);
+            List<String> urls = candidates.stream().map(SearchItem::link).toList();
+
+            Map<String, Double> titleSimMap = new java.util.HashMap<>();
+            Map<String, Double> answerSimMap = new java.util.HashMap<>();
+            try {
+                List<DocumentRepository.UrlSemanticScoreView> rows =
+                    documentRepository.findSemanticScoresByUrls(urls, queryEmbeddingStr);
+                for (DocumentRepository.UrlSemanticScoreView row : rows) {
+                    titleSimMap.put(row.getUrl(), row.getTitleSimilarity());
+                    answerSimMap.put(row.getUrl(), row.getAnswerSimilarity());
+                }
+            } catch (Exception e) {
+                log.warn("Batch semantic score query failed: {}", e.getMessage());
+            }
+
             List<ScoredItem> scored = new ArrayList<>(candidates.size());
             for (SearchItem item : candidates) {
-                double vectorScore = 0.0;
-                try {
-                    Optional<String> embOpt = documentRepository.findEmbeddingByUrl(item.link());
-                    if (embOpt.isPresent() && embOpt.get() != null) {
-                        float[] docVec = EmbeddingService.parseEmbedding(embOpt.get());
-                        if (docVec != null) {
-                            vectorScore = cosineSimilarity(queryVec, docVec);
-                        }
-                    }
-                } catch (Exception e) {
-                    log.debug("Could not get embedding for {}: {}", item.link(), e.getMessage());
-                }
-                // Blend: 60% existing score + 40% vector similarity (normalized to comparable range)
-                double blendedScore = item.score() * 0.6 + vectorScore * 2.0 * 0.4;
+                double titleSim = titleSimMap.getOrDefault(item.link(), 0.0);
+                double answerSim = answerSimMap.getOrDefault(item.link(), 0.0);
+                // 70% title match (user query ≈ question title), 30% answer match
+                double semanticScore = 0.7 * titleSim + 0.3 * answerSim;
+                double blendedScore = item.score() * 0.6 + semanticScore * 2.0 * 0.4;
                 scored.add(new ScoredItem(item, blendedScore));
             }
 
@@ -109,18 +118,6 @@ public class VectorSearchService {
             log.warn("rerank failed: {}", e.getMessage());
             return candidates;
         }
-    }
-
-    private double cosineSimilarity(float[] a, float[] b) {
-        if (a.length != b.length) return 0.0;
-        double dot = 0, normA = 0, normB = 0;
-        for (int i = 0; i < a.length; i++) {
-            dot += a[i] * b[i];
-            normA += (double) a[i] * a[i];
-            normB += (double) b[i] * b[i];
-        }
-        if (normA == 0 || normB == 0) return 0.0;
-        return dot / (Math.sqrt(normA) * Math.sqrt(normB));
     }
 
     private record ScoredItem(SearchItem item, double blendedScore) {}

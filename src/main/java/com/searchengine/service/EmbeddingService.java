@@ -53,6 +53,40 @@ public class EmbeddingService {
     }
 
     /**
+     * Generates and persists separate title and answer embeddings for semantic reranking.
+     * Title gets first priority (question-to-question semantic match),
+     * answer gets second priority (question-to-answer match).
+     */
+    public void generateAndStoreTitleAndAnswer(DocumentEntity entity) {
+        if (!embeddingClient.isEnabled()) {
+            return;
+        }
+        CompletableFuture.runAsync(() -> {
+            String url = entity.getUrl();
+            try {
+                if (entity.getTitle() != null && !entity.getTitle().isBlank()) {
+                    float[] titleVec = embeddingClient.embed(entity.getTitle());
+                    if (titleVec != null) {
+                        documentRepository.updateTitleEmbedding(url, formatEmbedding(titleVec));
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed to generate title embedding for {}: {}", url, e.getMessage());
+            }
+            try {
+                if (entity.getBestAnswerText() != null && !entity.getBestAnswerText().isBlank()) {
+                    float[] answerVec = embeddingClient.embed(entity.getBestAnswerText());
+                    if (answerVec != null) {
+                        documentRepository.updateAnswerEmbedding(url, formatEmbedding(answerVec));
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed to generate answer embedding for {}: {}", url, e.getMessage());
+            }
+        }, embeddingExecutor);
+    }
+
+    /**
      * Returns an embedding for the given query text without storing it.
      */
     public float[] generateForQuery(String query) {
